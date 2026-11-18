@@ -1,3 +1,4 @@
+import { SpeedTrail } from './SpeedTrail.js'
 import * as T from 'three'
 import type { Player, Snapshot } from '../../../shared/src/protocol.js'
 import {
@@ -18,6 +19,7 @@ const angleDelta = (a: number, b: number) =>
   Math.atan2(Math.sin(b - a), Math.cos(b - a))
 type Actor = {
   model: AnimalModel
+  trail: SpeedTrail
   blob: T.Mesh
   name: HTMLElement
   state: Player
@@ -107,6 +109,7 @@ export class GameScene {
   private readonly scene = new T.Scene()
   private readonly camera = new T.PerspectiveCamera(49, 1, 0.13, 260)
   private readonly renderer: T.WebGLRenderer
+  private readonly atmosphere: ReturnType<typeof sky>
   private readonly light: T.DirectionalLight
   private readonly diorama = menuDiorama()
   private track?: ReturnType<typeof course>
@@ -116,6 +119,7 @@ export class GameScene {
   private readonly observer: ResizeObserver
   private readonly abort = new AbortController()
   private readonly env = new T.Group()
+  private countdownAt = 0
   private snapshot: Snapshot | null = null
   private selfId = ''
   private distance = 7.7
@@ -124,6 +128,7 @@ export class GameScene {
   private pitch = 0.3
   private lastDrag = -100
   private received = 0
+  private capture?: (canvas: HTMLCanvasElement) => void
   private frame = 0
   private lastTime = 0
   private lastInteraction = 0
@@ -164,7 +169,8 @@ export class GameScene {
     this.labels.style.cssText =
       'position:absolute;inset:0;pointer-events:none;overflow:hidden;'
     container.append(this.renderer.domElement, this.labels)
-    this.light = sky(this.scene)
+    this.atmosphere = sky(this.scene)
+    this.light = this.atmosphere.light
     this.scene.add(this.diorama.group, this.env)
     this.env.add(this.particles.mesh)
     this.env.visible = false
@@ -212,7 +218,11 @@ export class GameScene {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault(), listen)
     this.frame = requestAnimationFrame(this.animate)
   }
+  captureOnNextFrame(callback: (canvas: HTMLCanvasElement) => void) {
+    this.capture = callback
+  }
   setMenu() {
+    this.capture = undefined
     this.snapshot = null
     this.env.visible = false
     this.diorama.group.visible = true
@@ -244,6 +254,7 @@ export class GameScene {
       this.yaw = 0
       this.pitch = 0.3
       this.warming = true
+      this.countdownAt = performance.now() / 1000 - (3 - snapshot.countdown)
       this.particles.clear()
     }
     this.snapshot = snapshot
@@ -261,16 +272,18 @@ export class GameScene {
       }
       if (!actor) {
         const model = new AnimalModel(p.animal),
+          trail = new SpeedTrail(),
           blob = shadow(),
           name = document.createElement('span')
         name.textContent = p.name
         name.style.cssText =
           'position:absolute;top:0;left:0;background:#193b32e6;color:#fff4da;border-radius:4px;padding:3px 7px;font:700 11px system-ui;white-space:nowrap;will-change:transform;'
         this.labels.append(name)
-        this.env.add(model.group, blob)
+        this.env.add(model.group, blob, trail.mesh)
         const latest = new T.Vector3(p.x, p.y, p.z)
         actor = {
           model,
+          trail,
           blob,
           name,
           state: p,
@@ -303,6 +316,23 @@ export class GameScene {
             1,
             p.yaw,
           )
+        const verdict = p.wildline
+        if (
+          verdict?.lastGate >= 0 &&
+          verdict.lastGate !== actor.state.wildline?.lastGate &&
+          verdict.verdict === 'hit'
+        ) {
+          const rush = verdict.burst > 0
+          this.particles.burst(
+            actor.displayed,
+            rush ? '#fff4a4' : '#ffc746',
+            rush ? 21 : 9,
+            0.16,
+            rush ? 7 : 4,
+            0,
+            p.yaw,
+          )
+        }
         actor.state = p
       }
     }
@@ -311,7 +341,8 @@ export class GameScene {
   private drop(id: string) {
     const a = this.actors.get(id)
     if (!a) return
-    this.env.remove(a.model.group, a.blob)
+    this.env.remove(a.model.group, a.blob, a.trail.mesh)
+    a.trail.mesh.geometry.dispose()
     a.blob.geometry.dispose()
     a.name.remove()
     this.actors.delete(id)
@@ -379,6 +410,11 @@ export class GameScene {
       this.renderer.shadowMap.needsUpdate = true
       this.lastShadow = t
     }
+    const weather = this.snapshot?.event
+    this.atmosphere.update(
+      weather?.stage === 'active' ? weather.kind : null,
+      dt,
+    )
     if (!this.snapshot) {
       this.diorama.update(t)
       const distance = Math.max(8.55, 8.45 / this.camera.aspect)
@@ -401,6 +437,9 @@ export class GameScene {
         event?.centerZ ?? who.state.z,
         8 - (event?.remaining ?? 8) + Math.min(0.12, gap),
         this.snapshot.players,
+        who.state,
+        this.snapshot.phase === 'COUNTDOWN' ? this.snapshot.countdown : 0,
+        t,
       )
       for (const actor of this.actors.values())
         this.moveActor(actor, t, dt, gap)
@@ -428,6 +467,9 @@ export class GameScene {
       this.particles.update(dt)
     }
     this.renderer.render(this.scene, this.camera)
+    const capture = this.capture
+    this.capture = undefined
+    capture?.(this.renderer.domElement)
   }
   private moveActor(a: Actor, t: number, dt: number, gap: number) {
     const p = a.state
@@ -464,22 +506,33 @@ export class GameScene {
       a.displayed.z,
     )
     a.blob.scale.setScalar(Math.max(0.3, 1 - (footY - surface) * 0.075))
+    const burst = p.wildline?.burst ?? 0
+    const rushing = burst > 0
+    a.trail.update(
+      a.model.group.position,
+      p.yaw,
+      burst,
+      t,
+      p.animal === 'turtle' ? 0.44 : 0.72,
+    )
     if (
-      (p.active || (speed > 5 && p.grounded)) &&
-      t - a.lastPuff > (p.active ? 0.09 : 0.18)
+      (rushing || p.active || (speed > 5 && p.grounded)) &&
+      t - a.lastPuff > (rushing ? 0.035 : p.active ? 0.09 : 0.18)
     ) {
-      const colour = p.active
-        ? {
-            elephant: '#a6c65e',
-            penguin: '#d4f6f2',
-            gorilla: '#ffcd71',
-            turtle: '#d6ca8b',
-          }[p.animal]
-        : '#f3d49b'
+      const colour = rushing
+        ? '#ffc748'
+        : p.active
+          ? {
+              elephant: '#a6c65e',
+              penguin: '#d4f6f2',
+              gorilla: '#ffcd71',
+              turtle: '#d6ca8b',
+            }[p.animal]
+          : '#f3d49b'
       this.particles.burst(
         a.model.group.position,
         colour,
-        p.active ? 3 : 1,
+        rushing ? 4 : p.active ? 3 : 1,
         p.active ? 0.29 : 0.14,
         1.8,
         1,
@@ -503,6 +556,13 @@ export class GameScene {
       focus.z - Math.cos(this.yaw) * length,
     )
     target.y = Math.max(target.y, elevationAt(target.z) + 1)
+    if (this.snapshot?.phase === 'COUNTDOWN') {
+      const remaining =
+        1 - T.MathUtils.smoothstep(t - this.countdownAt, 0, 2.85)
+      target.x += 5.2 * remaining
+      target.y += 2.4 * remaining
+      target.z -= 2.5 * remaining
+    }
     const obstructed = this.track?.avoidObstacle(focus, target)
     if (this.warming || obstructed) {
       this.camera.position.copy(target)
@@ -517,7 +577,7 @@ export class GameScene {
     this.camera.lookAt(focus)
     const fov = lerp(
       this.camera.fov,
-      a.state.active ? 62 : 52,
+      (a.state.wildline?.burst ?? 0) > 0 ? 68 : a.state.active ? 62 : 52,
       1 - Math.exp(-dt * 4),
     )
     if (Math.abs(fov - this.camera.fov) > 0.004) {
@@ -528,6 +588,7 @@ export class GameScene {
     this.light.target.position.copy(a.displayed)
   }
   dispose() {
+    this.capture = undefined
     cancelAnimationFrame(this.frame)
     this.observer.disconnect()
     this.abort.abort()

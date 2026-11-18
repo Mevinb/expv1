@@ -1,3 +1,4 @@
+import { steamFields } from './VentArt.js'
 import * as T from 'three'
 import {
   ball,
@@ -9,6 +10,14 @@ import {
   seeded,
   tube,
 } from './Art.js'
+import {
+  caldera,
+  festivalIsland,
+  raceBalloon,
+  finishCrown,
+  trackPaint,
+} from './Island.js'
+import { wildlineArt } from './WildlineArt.js'
 import { AnimalModel } from './Animals.js'
 import {
   bridgeSag,
@@ -26,7 +35,7 @@ import {
 } from '../../../shared/src/track.js'
 import type { Animal, Player, RaceEvent } from '../../../shared/src/protocol.js'
 
-const ink = '#24453e',
+const ink = '#183443',
   orange = '#fa6432',
   cream = '#fff0c6'
 type V = [number, number, number]
@@ -346,7 +355,7 @@ function banner(text: string, w: number, h: number, flip = false) {
   for (const side of [-1, 1]) {
     const mesh = new T.Mesh(new T.PlaneGeometry(w, h), mat)
     mesh.rotation.y = side > 0 ? 0 : Math.PI
-    mesh.position.z = side * 0.14
+    mesh.position.z = side * 0.29
     group.add(mesh)
   }
   if (flip) group.rotation.y = Math.PI
@@ -371,20 +380,41 @@ function arch(text: string, w: number, h: number) {
 }
 export function sky(scene: T.Scene) {
   scene.background = new T.Color('#8adbdc')
-  scene.fog = new T.FogExp2('#b6dac6', 0.0051)
+  scene.fog = new T.FogExp2('#b7d9cc', 0.0044)
+  const skyMix = { value: 0 },
+    stormMix = { value: 0 }
   const skyDome = new T.Mesh(
     new T.SphereGeometry(195, 24, 16),
     new T.ShaderMaterial({
       side: T.BackSide,
       depthWrite: false,
-      vertexShader: `varying float height; void main(){ height=normalize(position).y; mat4 view=mat4(mat3(viewMatrix)); gl_Position=projectionMatrix*view*vec4(position,1.); }`,
-      fragmentShader: `varying float height; void main(){ vec3 haze=vec3(0.72,0.90,0.79); vec3 azure=vec3(.24,.73,.83); vec3 colour=mix(haze,azure,smoothstep(-.08,.55,height)); gl_FragColor=vec4(colour,1.); }`,
+      uniforms: { skyMix, stormMix },
+      vertexShader: `varying vec3 horizon; void main(){ horizon=normalize(position); mat4 view=mat4(mat3(viewMatrix)); gl_Position=projectionMatrix*view*vec4(position,1.); }`,
+      fragmentShader: `varying vec3 horizon;uniform float skyMix;uniform float stormMix;
+        float noise(vec2 uv){
+          vec2 cells=floor(uv), f=fract(uv);
+          f=f*f*(3.-2.*f);
+          vec4 corners=fract(sin(vec4(dot(cells,vec2(31.13,17.42)))+vec4(0.,31.13,17.42,48.55))*15384.17);
+          return mix(mix(corners.x,corners.y,f.x),mix(corners.z,corners.w,f.x),f.y);
+        }
+        void main(){
+          vec3 p=normalize(horizon);
+          vec3 haze=mix(vec3(.89,.90,.76),vec3(.94,.78,.88),skyMix);
+          vec3 high=mix(vec3(.13,.65,.82),vec3(.36,.34,.78),skyMix);
+          vec3 cloud=mix(vec3(.97,.94,.79),vec3(.88,.79,.91),skyMix);
+          vec2 skyUV=p.xz/max(.12,p.y+.10);
+          float clouds=noise(skyUV*vec2(1.4,2.8))*.67+noise(skyUV*vec2(3.8,7.5))*.33;
+          float wisps=smoothstep(.55,.81,clouds)*smoothstep(.01,.15,p.y)*(1.-smoothstep(.42,.75,p.y))*.42;
+          vec3 c=mix(mix(haze,high,smoothstep(-.08,.55,p.y)),cloud,wisps);
+          c=mix(c,c*vec3(.74,.82,.87),stormMix);
+          gl_FragColor=vec4(c,1.);
+        }`,
     }),
   )
   skyDome.renderOrder = -10
   skyDome.frustumCulled = false
   scene.add(skyDome)
-  scene.add(new T.HemisphereLight(0xfff6dc, 0xe6b999, 1.95))
+  scene.add(new T.HemisphereLight(0xfff4da, 0x7ba6ad, 1.75))
   const light = new T.DirectionalLight(0xffe3bd, 2.15)
   light.castShadow = true
   light.shadow.mapSize.set(1024, 1024)
@@ -399,7 +429,30 @@ export function sky(scene: T.Scene) {
   light.shadow.normalBias = 0.035
   light.shadow.bias = -0.0004
   scene.add(light, light.target)
-  return light
+  const fog = scene.fog as T.FogExp2,
+    baseFog = new T.Color('#b7d9cc'),
+    gravityFog = new T.Color('#c2adcf'),
+    rainFog = new T.Color('#a8bec6')
+  return {
+    light,
+    update(evt: RaceEvent | null, dt: number) {
+      const mix = 1 - Math.exp(-dt * 2)
+      skyMix.value = T.MathUtils.lerp(
+        skyMix.value,
+        evt === 'lowGravity' ? 1 : 0,
+        mix,
+      )
+      stormMix.value = T.MathUtils.lerp(
+        stormMix.value,
+        evt === 'bananaRain' ? 1 : 0,
+        mix,
+      )
+      fog.color
+        .copy(baseFog)
+        .lerp(gravityFog, skyMix.value)
+        .lerp(rainFog, stormMix.value)
+    },
+  }
 }
 function shadowTexture() {
   const c = document.createElement('canvas')
@@ -528,6 +581,14 @@ export function menuDiorama() {
   ])
     stamp(map, prototypes.cloud, x, y, z, size)
   instance(map, group)
+  const volcano = caldera()
+  volcano.group.position.set(7, -2.1, -61)
+  volcano.group.scale.set(0.56, 0.56, 0.55)
+  group.add(volcano.group)
+  const balloon = raceBalloon()
+  balloon.position.set(-10, 8, -27)
+  balloon.scale.setScalar(0.58)
+  group.add(balloon)
   const sun = new T.Mesh(
     new T.CircleGeometry(4.6, 48),
     new T.MeshBasicMaterial({ color: '#fff1a1', fog: false }),
@@ -559,10 +620,10 @@ export function menuDiorama() {
   }
   group.add(flags.mesh())
   const cast: [Animal, number, number, number, number][] = [
-    ['elephant', 0.25, -0.15, 1.39, 0.42],
-    ['penguin', -1.67, 1.4, 1.1, -0.32],
-    ['turtle', 2.64, 0.16, 1.19, -0.55],
-    ['gorilla', -3.37, -2.19, 1.19, 0.56],
+    ['elephant', 0.66, 0, 1.27, 0.48],
+    ['penguin', -1.53, 1.42, 1.06, -0.26],
+    ['turtle', 2.66, 1.1, 1.0, -0.66],
+    ['gorilla', -3.24, -1.85, 1.2, 0.68],
   ]
   const actors = cast.map(([animal, x, z, size, yaw], i) => {
     const model = new AnimalModel(animal)
@@ -574,14 +635,43 @@ export function menuDiorama() {
     blob.position.set(x, 0.035, z)
     blob.scale.setScalar(size)
     group.add(blob)
-    return { model, offset: i * 1.38 }
+    return { model, blob, animal, x, z, offset: i * 1.38 }
   })
   return {
     group,
-    update: (time: number) =>
-      actors.forEach(({ model, offset }) =>
-        model.pose(time * 0.66 + offset, 0.64, false, false, 0),
-      ),
+    update(time: number) {
+      volcano.update(time)
+      balloon.position.y = 7.8 + 0.28 * Math.sin(time * 0.45)
+      balloon.rotation.z = 0.045 * Math.sin(time * 0.36)
+      actors.forEach(({ model, blob, animal, x, z, offset }) => {
+        const stride = time * 1.6 + offset
+        model.group.position.set(
+          x + Math.sin(stride * 0.43) * 0.13,
+          animal === 'gorilla'
+            ? 0.5 + Math.abs(Math.sin(stride * 0.7)) * 0.62
+            : Math.abs(Math.sin(stride)) * 0.11,
+          z + Math.sin(stride * 0.66) * 0.21,
+        )
+        model.group.rotation.z =
+          (animal === 'elephant'
+            ? -0.08
+            : animal === 'penguin'
+              ? 0.11
+              : 0.025) +
+          Math.sin(stride) * 0.035
+        model.group.rotation.x =
+          animal === 'gorilla' ? -0.13 : animal === 'turtle' ? 0.11 : 0
+        blob.position.x = model.group.position.x
+        blob.position.z = model.group.position.z
+        model.pose(
+          time + offset,
+          0.93,
+          animal === 'gorilla',
+          animal === 'gorilla',
+          0,
+        )
+      })
+    },
   }
 }
 
@@ -636,11 +726,17 @@ function obstacles() {
 }
 export function course() {
   const group = new T.Group()
+  const festival = festivalIsland()
+  const roadMaterial = trackPaint()
+  const volcano = caldera()
+  group.add(volcano.group)
+  const updateGates = wildlineArt(group)
+  const updateVents = steamFields(group)
   const hues: Record<string, string> = {
-    dirt: '#edb972',
+    dirt: '#e8b479',
     bridge: '#b98754',
     grass: '#93ae59',
-    mud: '#996a4b',
+    mud: '#925f49',
     rock: '#d4a976',
   }
   const deck: { mesh: T.Mesh; z: number }[] = []
@@ -653,16 +749,39 @@ export function course() {
     const random = seeded(start + 680)
     const road = new Sculpt(),
       map: Props = new Map()
+    festival.dress(chunk, road, start)
     for (const patch of ROAD.filter((p) => p.z >= start && p.z < start + 104)) {
       const { x, y, z, width, length, tilt, surface } = patch
       const slice = surface === 'bridge' ? new Sculpt() : road
       slice.part(
         block,
-        hues[surface],
+        surface === 'dirt' && patch.zone === 5 ? '#d89c71' : hues[surface],
         [x, y, z],
         [width, surface === 'bridge' ? 0.46 : 1.6, length + 0.04],
         [tilt, 0, 0],
       )
+      if (surface === 'dirt' || surface === 'mud') {
+        // Interrupted grooves follow the slope while the crown stays clear for the racing line.
+        for (const side of [-1, 1]) {
+          const xx = x + side * (width * 0.23 + Math.sin(z * 0.052) * 0.74)
+          slice.part(
+            box,
+            surface === 'mud' ? '#7e5545' : '#dbac77',
+            [xx, y + 0.036, z],
+            [0.16 + random() * 0.18, 0.032, length * 0.91],
+            [tilt, Math.sin(z * 0.058) * 0.11, 0],
+          )
+          if (surface === 'mud' && z % 16 < 8) {
+            slice.part(
+              pebble,
+              '#a3a589',
+              [xx, y + 0.047, z],
+              [1.7, 0.036, 2.8],
+              [tilt, 0, 0],
+            )
+          }
+        }
+      }
       if (surface === 'bridge')
         for (let i = -3; i <= 3; i += 1.15) {
           slice.part(
@@ -681,6 +800,19 @@ export function course() {
       if (surface === 'dirt' || surface === 'rock') {
         for (const side of [-1, 1]) {
           const t = side * (width / 2 - 0.32)
+          // Twin painted rumble strips give the course an edge that remains legible at racing speed.
+          if (patch.zone === 0 || patch.zone === 5) {
+            for (let n = 0; n < 2; n++) {
+              const dz = (n - 0.5) * 3.8
+              slice.part(
+                box,
+                (Math.floor(z / 8) + n) % 2 ? '#e7663d' : '#f6dd9f',
+                [x + t, y - Math.sin(tilt) * dz + 0.032, z + dz],
+                [0.85, 0.08, 3.85],
+                [tilt, 0, 0],
+              )
+            }
+          }
           slice.part(
             box,
             patch.zone === 5 ? '#f08a57' : '#f5d696',
@@ -691,11 +823,11 @@ export function course() {
         }
       }
       if (surface === 'dirt' || surface === 'rock')
-        for (let j = 0; j < 3; j++) {
+        for (let j = 0; j < 10; j++) {
           const dz = (random() - 0.5) * length
           road.part(
             pebble,
-            '#d29f66',
+            j % 4 === 0 ? '#f3c88b' : '#d6a371',
             [
               x + (random() - 0.5) * (width - 1),
               y - Math.sin(tilt) * dz + 0.029,
@@ -710,6 +842,29 @@ export function course() {
         y = elevationAt(z) - (z >= BRIDGE_DECK_END ? recoveryDrop(z) : 0),
         width = halfWidthAt(z)
       for (const side of [-1, 1]) {
+        if (width > 6 && z % 16 === 0 && z > 85 && z < 1400) {
+          const bank = width + 10
+          const soil =
+            z >= 664 && z < 920
+              ? '#936b59'
+              : z >= 920 && z < 1200
+                ? '#77737a'
+                : '#8b765d'
+          road.part(
+            pebble,
+            soil,
+            [x + side * bank, y - 5.2, z],
+            [12, 7, 15],
+            [0, random() * 0.65, 0],
+          )
+          road.part(
+            pebble,
+            z >= 920 && z < 1200 ? '#91a766' : '#71a368',
+            [x + side * (bank + 0.8), y - 2.65, z],
+            [11, 4.8, 14],
+            [0, 0.25, 0],
+          )
+        }
         if (z % 24 === 0)
           stamp(map, prototypes.marker, x + side * (width - 0.15), y, z, 1)
         if (width < 6 && z < BRIDGE_DECK_END && z % 16 === 0) {
@@ -720,7 +875,11 @@ export function course() {
             [0.13, 1, 0.13],
           )
         }
-        const off = width + 8 + random() * 11,
+        // Open sight lines at the grandstands, cliff faces and crowded bazaar.
+        const landmark =
+          z < 80 || (z > 215 && z < 455) || (z > 457 && z < 640) || z > 1400
+        const off =
+            width + (landmark ? 23 : 8) + random() * (landmark ? 16 : 12),
           xx = x + side * off
         road.part(
           pebble,
@@ -758,7 +917,9 @@ export function course() {
           )
       }
     }
-    chunk.add(road.mesh())
+    const terrain = road.mesh()
+    terrain.material = roadMaterial
+    chunk.add(terrain)
     instance(map, chunk)
     chunks.set(start, chunk)
     group.add(chunk)
@@ -787,7 +948,7 @@ export function course() {
   water.position.set(0, -7.5, FINISH_Z * 0.5)
   group.add(water)
   for (const [z, label] of [
-    [25, 'Jungle Breakdown'],
+    [11, 'Wildline Rally'],
     ...ZONES.slice(1).map((zone) => [zone.start, zone.name]),
     [FINISH_Z, 'Finish'],
   ] as [number, string][]) {
@@ -795,6 +956,25 @@ export function course() {
     gate.position.set(centerAt(z), elevationAt(z), z)
     group.add(gate)
   }
+  group.add(finishCrown(centerAt(FINISH_Z), elevationAt(FINISH_Z), FINISH_Z))
+  const balloons = [raceBalloon(), raceBalloon()]
+  for (const [i, b] of balloons.entries()) {
+    b.position.set(i === 0 ? 26 : -23, i === 0 ? 16 : 26, i === 0 ? 94 : 1437)
+    b.scale.setScalar(i === 0 ? 1.15 : 1.65)
+    group.add(b)
+  }
+  const starter = new T.Group()
+  starter.position.set(centerAt(11), elevationAt(11) + 5.11, 10.55)
+  const surround = new Sculpt().part(box, ink, [0, 0, 0], [4.1, 0.9, 0.48])
+  starter.add(surround.mesh())
+  const bulbs = Array.from({ length: 3 }, (_, i) => {
+    const lamp = new T.Mesh(ball, new T.MeshBasicMaterial({ color: '#a98a56' }))
+    lamp.position.set((i - 1) * 1.22, 0, -0.25)
+    lamp.scale.set(0.33, 0.33, 0.16)
+    starter.add(lamp)
+    return lamp
+  })
+  group.add(starter)
   const stripes = new Sculpt()
   for (const z of [0, FINISH_Z]) {
     const width = halfWidthAt(z) * 2
@@ -840,7 +1020,37 @@ export function course() {
     eventCenter: number,
     eventAge: number,
     racers: Player[],
+    viewer: Player,
+    countdown: number,
+    visualTime: number,
   ) {
+    const hill =
+      T.MathUtils.smoothstep(viewer.z, 890, 974) *
+      (1 - T.MathUtils.smoothstep(viewer.z, 1150, 1220))
+    const eruption = updateVents(t, viewer.z)
+    volcano.group.position.set(
+      centerAt(viewer.z) * 0.25 - 41 + 11 * Math.sin(viewer.z / 260),
+      -7 + hill * 17,
+      viewer.z + 128,
+    )
+    volcano.group.scale.setScalar(1 + hill * 0.28)
+    volcano.update(visualTime, eruption)
+    balloons.forEach((b, i) => {
+      b.position.y =
+        (i === 0 ? 16 : 26) + 0.65 * Math.sin(visualTime * 0.42 + i)
+      b.rotation.z = Math.sin(visualTime * 0.31 + i) * 0.07
+    })
+    festival.update(visualTime, viewer.z)
+    updateGates(viewer, t)
+    bulbs.forEach((bulb, i) =>
+      bulb.material.color.set(
+        countdown > 0
+          ? 3 - countdown >= i
+            ? '#ff7544'
+            : '#806a65'
+          : '#8cf59b',
+      ),
+    )
     for (const slab of deck) slab.mesh.position.y = -bridgeSag(slab.z, racers)
     for (const { mesh, h } of hazards) {
       const p = hazardPose(h, t)
