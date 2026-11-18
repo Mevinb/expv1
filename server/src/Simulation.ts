@@ -19,6 +19,7 @@ interface Driver {
   body: RAPIER.RigidBody
   collider: RAPIER.Collider
   grid: number
+  peakY: number
   control: Input
   pressed: { jump: boolean; ability: boolean; interact: boolean }
   power: number
@@ -30,7 +31,7 @@ interface Driver {
   seenPickups: Set<string>
 }
 type Prop = { hazard: Hazard; body: RAPIER.RigidBody }
-const newStats = () => ({ collisions: 0, airborne: 0, falls: 0, abilities: 0, throws: 0, backward: 0 })
+const newStats = () => ({ collisions: 0, airborne: 0, falls: 0, biggestFall: 0, abilities: 0, throws: 0, backward: 0 })
 
 export class Simulation {
   private world = new RAPIER.World({ x: 0, y: -24, z: 0 })
@@ -84,7 +85,7 @@ export class Simulation {
     const state: Racer = { id, animal, x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, vz: 0,
       grounded: true, cooldown: 0, active: false, instinct: '', resistance: 1, checkpoint: 0,
       finishTime: null, stats: newStats() }
-    const driver: Driver = { body, collider, grid: index, state, control: idleInput(),
+    const driver: Driver = { body, collider, grid: index, peakY: 0, state, control: idleInput(),
       pressed: { jump: false, ability: false, interact: false }, power: 0, stun: 0, instinctTime: 0,
       instinctLock: 0, holding: null, heldBy: null, seenPickups: new Set() }
     this.drivers.set(id, driver)
@@ -129,6 +130,7 @@ export class Simulation {
     const z = d.state.checkpoint === 0 ? START_Z - 3 * Math.floor(d.grid / 4) : CHECKPOINTS[d.state.checkpoint - 1] + 2
     const x = centerAt(z) + ((d.grid % 4) - 1.5) * 2.3
     const y = elevationAt(z) + FOOT + 0.05
+    d.peakY = y
     d.body.setTranslation({ x, y, z }, true)
     d.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
     d.power = d.stun = d.instinctTime = d.instinctLock = 0
@@ -355,6 +357,11 @@ export class Simulation {
 
   private updateState(d: Driver, racing: boolean) {
     const s = d.state, p = d.body.translation(), v = d.body.linvel()
+    if (Number.isFinite(p.y)) {
+      d.peakY = Math.max(d.peakY, p.y)
+      if (!s.grounded || s.vy < -1) s.stats.biggestFall = Math.max(s.stats.biggestFall, d.peakY - p.y)
+      if (s.grounded) d.peakY = p.y
+    }
     if (![p.x, p.y, p.z, v.x, v.y, v.z].every(Number.isFinite) || p.y < elevationAt(p.z) - 8 ||
         p.z < -30 || Math.abs(p.x - centerAt(p.z)) > 48) {
       s.stats.falls++

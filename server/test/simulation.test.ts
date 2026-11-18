@@ -81,6 +81,7 @@ test('falling restores the last checkpoint and invalid controls cannot replace m
   for (let i = 0; i < 200 && s.players()[0].stats.falls === 0; i++) tick(s)
   const player = s.players()[0]
   assert.equal(player.stats.falls, 1)
+  assert.ok(player.stats.biggestFall > 6)
   assert.equal(player.z, 0)
   assert.equal(player.checkpoint, 0)
   assert.equal(player.finishTime, null)

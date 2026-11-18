@@ -320,7 +320,7 @@ function race() {
 const awards = [
   ['collisions', 'Bumper beast', 'bumps'],
   ['airborne', 'Frequent flyer', 's airborne'],
-  ['falls', 'Cliff diver', 'falls'],
+  ['biggestFall', 'Cliff diver', 'm fallen'],
   ['abilities', 'Special delivery', 'specials'],
   ['throws', 'Hurl champion', 'throws'],
   ['backward', 'Wrong-way wonder', 'm reversed'],

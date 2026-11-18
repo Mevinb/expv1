@@ -87,6 +87,10 @@ export class GameAudio {
       if (Math.hypot(racer.x - me.x, racer.z - me.z) > 16) continue
       const old = prev.players.find(p => p.id === racer.id)
       if (old && racer.stats.abilities > old.stats.abilities) this.special(racer.animal)
+      if (old && racer.stats.throws > old.stats.throws) {
+        this.note('sfx', 280, 920, .14, 'sine', .16)
+        this.note('sfx', 950, 185, .38, 'triangle', .13, .1)
+      }
     }
     const old = prev.players.find(p => p.id === id)
     if (!old) return

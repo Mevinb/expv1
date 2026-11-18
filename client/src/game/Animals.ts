@@ -6,6 +6,12 @@ const EYE = '#292333',
   MILK = '#fff1cf',
   coral = '#ff5b35'
 const models = new Map<Animal, T.Group>()
+// Shared clip, separate playback state per animal. Locomotion and impacts layer
+// pitch and roll onto the head's idle glance.
+const glance = new T.AnimationClip('Look around', 2.8, [
+  new T.NumberKeyframeTrack('head.rotation[y]', [0, .7, 1.4, 2.1, 2.8],
+    [0, .05, 0, -.05, 0], T.InterpolateSmooth)
+])
 type Vec = [number, number, number]
 
 function eyes(
@@ -287,6 +293,7 @@ function turtle(root: T.Group) {
 
 export class AnimalModel {
   readonly group = new T.Group()
+  private readonly mixer: T.AnimationMixer
   private readonly model: T.Group
   private readonly joints = new Map<string, T.Object3D>()
   constructor(readonly animal: Animal) {
@@ -299,6 +306,8 @@ export class AnimalModel {
     this.model.traverse((o) => {
       if (o.name) this.joints.set(o.name, o)
     })
+    this.mixer = new T.AnimationMixer(this.model)
+    this.mixer.clipAction(glance).play()
     this.group.add(this.model)
   }
   pose(
@@ -308,6 +317,7 @@ export class AnimalModel {
     airborne: boolean,
     hit: number,
   ) {
+    this.mixer.setTime(t)
     const cycle = t * 9,
       stride = Math.min(1, pace)
     const foot = Math.sin(cycle) * stride
@@ -340,11 +350,8 @@ export class AnimalModel {
     }
     const head = this.joints.get('head')!
     head.visible = !roll
-    head.rotation.set(
-      Math.sin(t * 3) * 0.025 - foot * 0.055,
-      Math.sin(t * 2.3) * 0.035,
-      foot * 0.04,
-    )
+    head.rotation.x = Math.sin(t * 3) * 0.025 - foot * 0.055
+    head.rotation.z = foot * 0.04
     const trunk = this.joints.get('trunk')
     if (trunk)
       trunk.rotation.set(
