@@ -1,15 +1,19 @@
 import type { Animal, Player, Snapshot } from '../../../shared/src/protocol.js'
 import { ANIMALS, isAnimal } from '../../../shared/src/animals.js'
 import {
-  CHECKPOINTS,
-  FINISH_Z,
-  ZONES,
-  centerAt,
-  zoneAt,
-} from '../../../shared/src/track.js'
+  cupMenu,
+  cupLoadout,
+  cupResults,
+  recordRun,
+  raceTime as time,
+  escapeText as escape,
+  ordinal,
+} from './Cup.js'
+import { Broadcast, broadcastMarkup } from './Broadcast.js'
 import { animalPortrait } from '../game/Portrait.js'
 import { icon, paw } from './icons.js'
 import './style.css'
+import './championship.css'
 
 export interface Settings {
   music: number
@@ -19,6 +23,8 @@ export interface Settings {
   distance: number
 }
 export interface UIActions {
+  cup(name: string, animal: Animal): void
+  photo(): void
   create(name: string): void
   join(name: string, code: string): void
   practice(name: string): void
@@ -48,25 +54,6 @@ const defaults: Settings = {
   announcer: 0.7,
   distance: 8,
   muted: false,
-}
-const escape = (s: string) =>
-  s.replace(
-    /[&<>"']/g,
-    (char) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        char
-      ]!,
-  )
-const ordinal = (n: number) => ['1st', '2nd', '3rd'][n - 1] ?? n + 'th'
-const stamp = (n: number) => String(n).padStart(2, '0')
-const time = (seconds: number, detailed = false) => {
-  const whole = Math.floor(Math.max(0, seconds) * 100)
-  return (
-    Math.floor(whole / 6000) +
-    ':' +
-    stamp(Math.floor(whole / 100) % 60) +
-    (detailed ? '.' + stamp(whole % 100) : '')
-  )
 }
 function load(key: string) {
   try {
@@ -139,35 +126,19 @@ const coursePlate =
   '<aside class="course-plate"><span class="plate-num">' +
   icon('flag', 26) +
   '</span><div><small>FEATURED COURSE</small><strong>Jungle Breakdown</strong></div></aside>'
-function menu() {
-  return (
-    '<header class="topbar">' +
-    wordmark +
-    '<div class="nav-tools"><button data-action="controls">' +
-    icon('keys', 18) +
-    '<span>Controls</span></button><button data-action="settings">' +
-    icon('settings', 18) +
-    '<span>Settings</span></button><i></i><button class="sound-toggle" data-action="mute" aria-label="Mute audio"></button></div></header>' +
-    '<div class="menu-split"><section class="entry-panel"><div class="entry-inner"><div class="flag-label"><b class="check-flag"></b>NATURAL DISASTERS</div><h1>BEAST<span>MODE<span class="title-stop">.</span></span></h1>' +
-    '<p class="tagline">Evolution was a mistake.<br><b>Now it’s a race.</b></p>' +
-    '<div class="play-choices">' +
-    action('create', 'Create room', 'flag', true) +
-    action('join', 'Join room', 'users') +
-    '<button class="practice-link" data-action="practice">' +
-    icon('run', 17) +
-    'Solo practice' +
-    icon('arrow', 15) +
-    '</button></div></div></section>' +
-    '<div class="course-window"><i class="view-corner tl"></i><i class="view-corner tr"></i>' +
-    coursePlate +
-    '<i class="view-corner br"></i></div></div>' +
-    '<footer class="menu-footer"><span>' +
-    icon('users', 15) +
-    ' 2–8 racers</span><b></b><span>' +
-    icon('clock', 15) +
-    ' 2–4 min races</span><b></b><span>' +
-    icon('globe', 15) +
-    ' Online multiplayer</span><i class="checks"></i></footer>'
+function menu(selected: Animal, online: boolean) {
+  return cupMenu(
+    smallHeader(
+      '<button data-action="controls">' +
+        icon('keys', 18) +
+        '<span>Controls</span></button>' +
+        '<button data-action="settings">' +
+        icon('settings', 18) +
+        '<span>Settings</span></button>' +
+        '<button class="sound-toggle" data-action="mute" aria-label="Mute audio"></button>',
+    ),
+    selected,
+    online,
   )
 }
 function smallHeader(right: string) {
@@ -306,17 +277,6 @@ function lobby(snapshot: Snapshot, me: Player) {
     ' WASD to test your racer</span></div></div>'
   )
 }
-function race() {
-  return (
-    '<div class="race-ui"><div class="hud-top"><div class="position-tile"><small>POSITION</small><strong id="place"></strong></div><div class="course-hud"><b>Jungle Breakdown</b><span id="zone"></span></div><div class="race-clock">' +
-    icon('clock', 18) +
-    '<b id="timer"></b></div><button class="pause-btn" data-action="pause" aria-label="Race menu">' +
-    icon('pause', 20) +
-    '</button></div>' +
-    '<div class="announcer" id="event" role="status"></div><div class="countdown" id="count" aria-live="polite"></div>' +
-    '<div class="hud-bottom"><div class="race-progress"><div><small>CHECKPOINTS</small><b id="checks"></b></div><progress id="progress" max="1"></progress><span id="direction"></span></div><div class="ability-hud"><div class="ability-line"><kbd id="ability-key">E</kbd><strong id="ability"></strong><span id="cool"></span></div><div class="resist-line"><kbd>Q</kbd><b id="instinct">Instinct resistance</b><progress id="resist" max="1"></progress></div></div></div></div>'
-  )
-}
 const awards = [
   ['collisions', 'Bumper beast', 'bumps'],
   ['airborne', 'Frequent flyer', 's airborne'],
@@ -403,11 +363,15 @@ export class GameUI {
   private returnToPause = false
   private errorTimer = 0
   private lastTrigger: HTMLElement | null = null
-  private nodes = new Map<string, HTMLElement>()
+  private raceHud?: Broadcast
+  private cupAnimal: Animal = 'elephant'
+  private launching = false
+  private record = false
 
   constructor(
     private readonly root: HTMLElement,
     private readonly actions: UIActions,
+    private readonly onlineRooms = true,
   ) {
     root.innerHTML =
       '<div class="surface"></div><dialog class="overlay"></dialog><div class="toast" role="status" aria-live="polite"></div>'
@@ -463,6 +427,10 @@ export class GameUI {
       if (!(event.target instanceof HTMLInputElement)) return
       const field = event.target
       field.setCustomValidity('')
+      if (field.name === 'racer-name') {
+        this.nickname = field.value.trim()
+        save('beast-name', this.nickname)
+      }
       if (field.name === 'code')
         field.value = field.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
       if (field.type === 'range') {
@@ -475,6 +443,8 @@ export class GameUI {
         this.commitSettings()
       }
     })
+    const animal = load('beast-cup-animal')
+    if (isAnimal(animal)) this.cupAnimal = animal
     this.showMenu()
     this.actions.settings({ ...this.values })
   }
@@ -483,8 +453,26 @@ export class GameUI {
     this.snapshot = undefined
     this.selfId = ''
     this.signature = ''
-    this.setScreen('menu', menu())
+    this.launching = false
+    this.setScreen('menu', menu(this.cupAnimal, this.onlineRooms))
     this.updateSound()
+  }
+
+  loadingCup(value: boolean) {
+    this.launching = value
+    const button =
+      this.surface.querySelector<HTMLButtonElement>('[data-action=cup]')
+    if (!button) return
+    button.disabled = value
+    button.setAttribute('aria-busy', String(value))
+    button.querySelector('strong')!.textContent = value
+      ? 'Opening grid…'
+      : 'Race the cup'
+    this.surface
+      .querySelectorAll<HTMLButtonElement>(
+        '.cup-cast button,.cup-footer button',
+      )
+      .forEach((b) => (b.disabled = value))
   }
 
   update(s: Snapshot, selfId: string) {
@@ -499,8 +487,11 @@ export class GameUI {
           ? 'results'
           : 'race'
     if (next === 'race') {
-      if (this.screen !== next) this.setScreen(next, race())
-      this.updateHud(s, me)
+      if (this.screen !== next) {
+        this.setScreen(next, broadcastMarkup(s))
+        this.raceHud = new Broadcast(this.surface)
+      }
+      this.raceHud!.update(s, me)
       return
     }
     // Race ranking changes as players move around the staging area. Keep the
@@ -534,7 +525,16 @@ export class GameUI {
         : null
     const lobbyScroll =
       this.surface.querySelector('.lobby-panel')?.scrollTop ?? 0
-    this.setScreen(next, next === 'lobby' ? lobby(s, me) : results(s, me))
+    if (s.cup && next === 'results' && this.screen !== 'results')
+      this.record = recordRun(me)
+    this.setScreen(
+      next,
+      next === 'lobby'
+        ? lobby(s, me)
+        : s.cup
+          ? cupResults(s, me, this.record)
+          : results(s, me),
+    )
     const panel = this.surface.querySelector('.lobby-panel')
     if (panel) panel.scrollTop = lobbyScroll
     if (focused?.dataset.action && !this.dialog.open) {
@@ -578,90 +578,30 @@ export class GameUI {
     this.screen = screen
     document.body.dataset.screen = screen
     this.surface.innerHTML = html
-    this.nodes.clear()
-    this.surface
-      .querySelectorAll<HTMLElement>('[id]')
-      .forEach((el) => this.nodes.set(el.id, el))
-  }
-
-  private updateHud(s: Snapshot, me: Player) {
-    const write = (id: string, value: string) => {
-      const el = this.nodes.get(id)!
-      if (el.textContent !== value) el.textContent = value
-    }
-    const meter = (id: string, num: number) => {
-      ;(this.nodes.get(id) as HTMLProgressElement).value = Math.max(
-        0,
-        Math.min(1, num),
-      )
-    }
-    const zone = zoneAt(me.z)
-    write('place', ordinal(me.place) + ' / ' + s.players.length)
-    write('zone', ZONES[zone].name)
-    write('timer', time(s.elapsed, true))
-    write('checks', Math.max(0, me.checkpoint) + ' / ' + CHECKPOINTS.length)
-    meter('progress', me.z / FINISH_Z)
-    const target = Math.max(me.z + 8, CHECKPOINTS[me.checkpoint] ?? FINISH_Z)
-    const turn =
-      Math.atan2(centerAt(me.z + 10) - me.x, Math.min(10, target - me.z)) -
-      me.yaw
-    const heading = Math.atan2(Math.sin(turn), Math.cos(turn))
-    write(
-      'direction',
-      me.finishTime !== null
-        ? 'Finish line crossed'
-        : Math.abs(heading) > 1.8
-          ? '↶  Turn around'
-          : heading > 0.38
-            ? '↖  Bear left'
-            : heading < -0.38
-              ? '↗  Bear right'
-              : '↑  Straight ahead',
-    )
-    const grabbing = me.animal === 'gorilla'
-    write('ability-key', grabbing && !me.active ? 'F' : 'E')
-    write(
-      'ability',
-      grabbing && me.active ? 'Throw racer' : ANIMALS[me.animal].special,
-    )
-    write(
-      'cool',
-      me.active
-        ? 'Active'
-        : me.cooldown > 0.05
-          ? Math.ceil(me.cooldown) + 's'
-          : 'Ready',
-    )
-    write('instinct', me.instinct || 'Instinct resistance')
-    meter('resist', me.resistance)
-    write(
-      'count',
-      s.phase === 'COUNTDOWN'
-        ? String(Math.max(1, Math.ceil(s.countdown)))
-        : s.elapsed < 0.8
-          ? 'GO!'
-          : '',
-    )
-    const e = s.event
-    write(
-      'event',
-      me.finishTime !== null
-        ? 'Finished! Waiting for the field…'
-        : e
-          ? (e.stage === 'warning' ? 'Incoming · ' : '') +
-            (e.kind === 'lowGravity'
-              ? 'Gravity is taking a break!'
-              : 'Forecast: falling bananas!') +
-            ' · ' +
-            Math.ceil(e.remaining) +
-            's'
-          : '',
-    )
+    this.raceHud = undefined
   }
 
   private act(name: string, button: HTMLButtonElement) {
     const me = this.snapshot?.players.find((p) => p.id === this.selfId)
     switch (name) {
+      case 'cup-animal': {
+        if (!isAnimal(button.dataset.animal) || this.launching) break
+        this.cupAnimal = button.dataset.animal
+        save('beast-cup-animal', this.cupAnimal)
+        const deck = this.surface.querySelector<HTMLElement>('#cup-loadout')!
+        deck.innerHTML = cupLoadout(this.cupAnimal)
+        deck
+          .querySelector<HTMLButtonElement>('[aria-pressed=true]')
+          ?.focus({ preventScroll: true })
+        break
+      }
+      case 'photo':
+        this.actions.photo()
+        break
+      case 'cup':
+        if (!this.launching)
+          this.actions.cup(this.nickname || 'Rookie', this.cupAnimal)
+        break
       case 'create':
       case 'join':
         this.openOverlay(name)
@@ -796,6 +736,9 @@ export class GameUI {
     } else if (overlay === 'controls') {
       title = 'Race controls'
       content =
+        (this.snapshot?.cup || this.screen === 'menu'
+          ? '<p class="cup-control-note"><strong>Wildline Cup</strong> runs automatically. Steer with A / D or the arrow keys. Hold S or ↓ to brake.</p>'
+          : '') +
         '<dl class="controls-list">' +
         controls
           .map(
@@ -811,7 +754,11 @@ export class GameUI {
     } else if (overlay === 'settings') {
       title = 'Settings'
       content =
-        '<div class="settings-list">' +
+        '<div class="settings-list"><label class="field">' +
+        (this.screen === 'menu' ? 'Racer name' : 'Racer name for next race') +
+        '<input name="racer-name" placeholder="Rookie" maxlength="18" autocomplete="nickname" value="' +
+        escape(this.nickname) +
+        '"></label>' +
         (
           [
             ['music', 'Music'],
@@ -855,10 +802,11 @@ export class GameUI {
         action('close', 'Resume', 'arrow', true) +
         action('controls', 'Controls', 'keys') +
         action('settings', 'Settings', 'settings') +
-        (this.snapshot?.practice && this.screen === 'race'
+        (this.snapshot?.practice && !this.snapshot.cup && this.screen === 'race'
           ? action('lobby', 'Change racer', 'users')
           : '') +
-        '<button data-action="leave" class="practice-link">Leave room ' +
+        '<button data-action="leave" class="practice-link">' +
+        (this.snapshot?.cup ? 'Return to starting grid ' : 'Leave room ') +
         icon('arrow', 15) +
         '</button></div>'
     }
