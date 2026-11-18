@@ -4,6 +4,7 @@ import { ANIMALS } from '../../shared/src/animals.js'
 import { idleInput, type Animal, type Input, type Phase, type RaceEvent, type Racer } from '../../shared/src/protocol.js'
 import { START_Z, CHECKPOINTS, ROAD, HAZARDS, bridgeSag, centerAt, elevationAt, hazardPose, rainDrop, zoneAt, type Hazard, type RoadPatch } from '../../shared/src/track.js'
 
+import { crossWildline, freshWildline } from './Wildline.js'
 import { gateCrossing } from './checkpoints.js'
 
 const DT = 1 / 30
@@ -84,7 +85,7 @@ export class Simulation {
       .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS), body)
     const state: Racer = { id, animal, x: 0, y: 0, z: 0, yaw: 0, vx: 0, vy: 0, vz: 0,
       grounded: true, cooldown: 0, active: false, instinct: '', resistance: 1, checkpoint: 0,
-      finishTime: null, stats: newStats() }
+      finishTime: null, wildline: freshWildline(), stats: newStats() }
     const driver: Driver = { body, collider, grid: index, peakY: 0, state, control: idleInput(),
       pressed: { jump: false, ability: false, interact: false }, power: 0, stun: 0, instinctTime: 0,
       instinctLock: 0, holding: null, heldBy: null, seenPickups: new Set() }
@@ -117,7 +118,7 @@ export class Simulation {
     this.previousEvent = null
     this.rainAge = 0
     for (const d of this.drivers.values()) {
-      Object.assign(d.state, { checkpoint: 0, finishTime: null, cooldown: 0, stats: newStats(), resistance: 1 })
+      Object.assign(d.state, { checkpoint: 0, finishTime: null, cooldown: 0, stats: newStats(), wildline: freshWildline(), resistance: 1 })
       d.control = idleInput()
       d.pressed = { jump: false, ability: false, interact: false }
       d.seenPickups.clear()
@@ -130,6 +131,8 @@ export class Simulation {
     const z = d.state.checkpoint === 0 ? START_Z - 3 * Math.floor(d.grid / 4) : CHECKPOINTS[d.state.checkpoint - 1] + 2
     const x = centerAt(z) + ((d.grid % 4) - 1.5) * 2.3
     const y = elevationAt(z) + FOOT + 0.05
+    d.state.wildline.chain = 0
+    d.state.wildline.burst = 0
     d.peakY = y
     d.body.setTranslation({ x, y, z }, true)
     d.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
@@ -226,6 +229,7 @@ export class Simulation {
       true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, d.body)
     s.grounded = Boolean(floor && v.y < 2.6)
     s.cooldown = Math.max(0, s.cooldown - DT)
+    s.wildline.burst = Math.max(0, s.wildline.burst - DT)
     d.power = Math.max(0, d.power - DT)
     d.stun = Math.max(0, d.stun - DT)
     d.instinctTime = Math.max(0, d.instinctTime - DT)
@@ -283,7 +287,8 @@ export class Simulation {
       } else if (s.animal === 'turtle') speed *= ABILITIES.turtle.hideSpeed
       else if (s.animal === 'gorilla') speed *= ABILITIES.gorilla.instinctSpeed
     }
-    const traction = d.power > 0 ? 34 : spec.acceleration * (s.grounded ? slick ? 1 : 1.35 : 0.52)
+    if (s.wildline.burst > 0) speed += 6.5
+    const traction = d.power > 0 || s.wildline.burst > 0 ? 34 : spec.acceleration * (s.grounded ? slick ? 1 : 1.35 : 0.52)
     const changeX = ax * speed - v.x, changeZ = az * speed - v.z
     const factor = Math.min(1, traction * DT / Math.max(0.001, Math.hypot(changeX, changeZ)))
     const jump = d.pressed.jump && s.grounded
@@ -371,6 +376,7 @@ export class Simulation {
     const speed = Math.hypot(v.x, v.z), factor = Math.min(1, 32 / Math.max(1, speed))
     if (factor < 1 || Math.abs(v.y) > 23) d.body.setLinvel({ x: v.x * factor, y: clamp(v.y, -23, 23), z: v.z * factor }, true)
     if (racing && s.finishTime === null) {
+      crossWildline(s.wildline, s, p)
       const gate = CHECKPOINTS[s.checkpoint]
       const fraction = gateCrossing(s.checkpoint, s, p)
       if (fraction !== null) {
@@ -434,7 +440,7 @@ export class Simulation {
   }
 
   players(): Racer[] {
-    return [...this.drivers.values()].map(({ state }) => ({ ...state, stats: { ...state.stats } }))
+    return [...this.drivers.values()].map(({ state }) => ({ ...state, stats: { ...state.stats }, wildline: { ...state.wildline } }))
   }
 
   dispose() { this.queue.free(); this.world.free(); this.drivers.clear(); this.contacts.clear() }

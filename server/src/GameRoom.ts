@@ -1,4 +1,5 @@
 import type { Animal, Phase, Player, RaceEvent, Snapshot } from '@beast/shared/protocol'
+import { CUP_RIVALS, driveRival } from './CupRivals.js'
 import { Simulation } from './Simulation.js'
 
 export const TICK_RATE = 30
@@ -14,10 +15,12 @@ export class GameRoom {
   countdownTicks = 0
   eventKind: RaceEvent = 'lowGravity'
   eventAt = 0
+  private bots = new Map<string, Animal>()
+  private cupFinishTick: number | null = null
   private results: Player[] = []
   private departedFinishers: Player[] = []
 
-  constructor(readonly code: string, readonly practice: boolean) {}
+  constructor(readonly code: string, readonly practice: boolean, readonly cup = false) {}
 
   add(id: string, name: string) {
     if (this.phase !== 'WAITING') throw new Error('That race is already underway.')
@@ -64,7 +67,9 @@ export class GameRoom {
     if (!rematch && [...this.members].some(([peer, member]) => peer !== id && !member.ready)) {
       throw new Error('Wait for everyone to ready up.')
     }
+    if (this.cup) this.prepareRivals()
     this.sim.reset()
+    this.cupFinishTick = null
     this.results = []; this.departedFinishers = []
     this.ticks = 0
     this.countdownTicks = 3 * TICK_RATE
@@ -73,9 +78,25 @@ export class GameRoom {
     this.phase = 'COUNTDOWN'
   }
 
+  private clearRivals() {
+    for (const id of this.bots.keys()) this.sim.remove(id)
+    this.bots.clear()
+  }
+
+  private prepareRivals() {
+    this.clearRivals()
+    const human = this.sim.players().find(racer => racer.id === this.hostId)!
+    for (const animal of ANIMAL_GRID.filter(animal => animal !== human.animal)) {
+      const id = 'rival-' + animal
+      this.sim.add(id, animal, this.bots.size + 1)
+      this.bots.set(id, animal)
+    }
+  }
+
   lobby(id: string) {
     this.requireHost(id)
     if (!this.practice || this.phase === 'WAITING') this.requirePhase('RESULTS')
+    this.clearRivals()
     this.sim.reset()
     this.ticks = this.countdownTicks = 0
     this.phase = 'WAITING'
@@ -91,12 +112,26 @@ export class GameRoom {
 
   step() {
     if (this.phase === 'RESULTS') return
-    if (this.phase === 'RACING') this.ticks++
+    if (this.phase === 'RACING') {
+      this.ticks++
+      if (this.cup) {
+        const field = this.sim.players()
+        const human = field.find(player => player.id === this.hostId)
+        if (human) for (const racer of field) {
+          if (this.bots.has(racer.id)) this.sim.input(racer.id, driveRival(racer, field, human, this.ticks))
+        }
+      }
+    }
     const event = this.event()
     this.sim.step(this.phase, event?.stage === 'active' ? event.kind : null)
     if (this.phase === 'COUNTDOWN' && --this.countdownTicks <= 0) this.phase = 'RACING'
     else if (this.phase === 'RACING') {
-      if (this.ticks >= RACE_LIMIT * TICK_RATE || this.sim.players().every(p => p.finishTime !== null)) {
+      const field = this.sim.players()
+      if (this.cup && this.cupFinishTick === null && field.some(p => p.id === this.hostId && p.finishTime !== null)) {
+        this.cupFinishTick = this.ticks + 2 * TICK_RATE
+      }
+      if (this.ticks >= RACE_LIMIT * TICK_RATE || field.every(p => p.finishTime !== null) ||
+          this.cupFinishTick !== null && this.ticks >= this.cupFinishTick) {
         this.finish()
       }
     }
@@ -104,6 +139,8 @@ export class GameRoom {
 
   private livePlayers(): Player[] {
     return this.sim.players().map(racer => {
+      const bot = this.bots.get(racer.id)
+      if (bot) return { ...racer, name: CUP_RIVALS[bot].name, ready: true, place: 0, bot: true }
       const { name, ready } = this.members.get(racer.id)!
       return { ...racer, name, ready, place: 0 }
     })
@@ -127,7 +164,7 @@ export class GameRoom {
 
   snapshot(): Snapshot {
     const players = this.phase === 'RESULTS' ? this.results : this.ranked(this.livePlayers())
-    return { code: this.code, practice: this.practice, hostId: this.hostId, phase: this.phase,
+    return { code: this.code, cup: this.cup, practice: this.practice, hostId: this.hostId, phase: this.phase,
       elapsed: this.ticks / TICK_RATE, countdown: Math.ceil(this.countdownTicks / TICK_RATE),
       timeLimit: RACE_LIMIT, event: this.event(), players }
   }
