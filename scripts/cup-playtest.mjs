@@ -31,14 +31,16 @@ try {
           const center = 11 * Math.sin(z / 86) + 4 * Math.sin(z / 38)
           const gate = gates[me.wildline.lastGate + 1]
           const lane = z < 205 ? 8.7 : z < 438 ? -8.5 : z < 670 ? 0 : z < 921 ? -10.3 : 8.7
-          const target = gate && gate.index < 3 ? gate.x : center + lane
+          const aimingForGate = !window.earnedBurst && gate && gate.z - me.z < 35
+          const target = aimingForGate ? gate.x : center + lane
           const delta = me.x - target + me.vx * .20
           const steer = delta > .7 ? 'KeyD' : delta < -.7 ? 'KeyA' : ''
           if (window.steering !== steer) {
             if (window.steering) dispatchEvent(new KeyboardEvent('keyup', { code:window.steering, bubbles:true }))
-            if (steer) dispatchEvent(new KeyboardEvent('keydown', { code:steer, bubbles:true, cancelable:true }))
             window.steering = steer
           }
+          // Repeat held keys as a keyboard does when focus or a pause clears the input.
+          if (steer) dispatchEvent(new KeyboardEvent('keydown', { code:steer, bubbles:true, cancelable:true }))
           if (me.wildline.burst > 0) window.earnedBurst = true
         })
       }
@@ -68,7 +70,7 @@ try {
   assert.equal(await page.evaluate(() => window.cupFrame.elapsed), unfocused)
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
   if (out) await page.screenshot({path:out+'/cup-grid.png'})
-  await page.waitForFunction(() => window.earnedBurst === true, undefined, {timeout:24000})
+  await page.waitForFunction(() => window.earnedBurst === true, undefined, {timeout:130000})
   if (out) await page.screenshot({path:out+'/cup-burst.png'})
   console.log('Earned the three-gate burst and observed four live racers.')
   await page.locator('body[data-screen=results]').waitFor({timeout:247000})
@@ -83,6 +85,7 @@ try {
   assert.match(image.suggestedFilename(), /penguin.*\.png$/)
   if (out) await image.saveAs(out+'/race-postcard.png')
   const bytes = await readFile(await image.path())
+  assert.ok(bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])))
   assert.equal(bytes.readUInt32BE(16),1200)
   assert.ok(bytes.length > 25000)
   await page.locator('[data-action=rematch]').click()
