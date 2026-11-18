@@ -1,0 +1,10 @@
+.touch-drive { position: fixed; inset: auto max(16px,env(safe-area-inset-right)) max(15px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); z-index: 7; display: flex; align-items: flex-end; justify-content: space-between; pointer-events: none; user-select: none; }
+.touch-drive[hidden], .touch-drive button[hidden] { display: none; }
+.drive-pad, .drive-buttons button { touch-action: none; pointer-events: auto; -webkit-tap-highlight-color: transparent; }
+.drive-pad { width: 92px; height: 92px; border-radius: 50%; background: #0f241eca; border: 2px solid #f7f6da9c; display: grid; place-items: center; box-shadow: inset 0 0 0 7px #ffffff16; }
+.drive-stick { transform: translate(var(--sx,0px),var(--sy,0px)); width: 39px; height: 39px; background: #e8e5c9; border: 4px double #283c30; border-radius: 50%; }
+.drive-buttons { display: grid; grid-template-columns: repeat(2, minmax(48px,1fr)); gap: 6px; }
+.drive-buttons button { min-height: 42px; border-radius: 14px; padding: 3px 10px; background: #16382fee; border: 1px solid #f0eac3c0; color: #fff4d4; font: 700 15px system-ui,sans-serif; }
+.drive-buttons button[data-key=ability] { background: #fac953; color: #20271e; }
+.drive-buttons button.pressed { transform: scale(.92); }
+@media(max-height:470px){ .drive-pad{width:71px;height:71px}.touch-drive{bottom:8px}.drive-buttons button{min-height:33px} }
