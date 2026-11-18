@@ -1,3 +1,4 @@
+import { raceBibs } from './RaceBibs.js'
 import * as T from 'three'
 import type { Animal } from '../../../shared/src/protocol.js'
 import { ball, pebble, Sculpt, tube } from './Art.js'
@@ -9,8 +10,12 @@ const models = new Map<Animal, T.Group>()
 // Shared clip, separate playback state per animal. Locomotion and impacts layer
 // pitch and roll onto the head's idle glance.
 const glance = new T.AnimationClip('Look around', 2.8, [
-  new T.NumberKeyframeTrack('head.rotation[y]', [0, .7, 1.4, 2.1, 2.8],
-    [0, .05, 0, -.05, 0], T.InterpolateSmooth)
+  new T.NumberKeyframeTrack(
+    'head.rotation[y]',
+    [0, 0.7, 1.4, 2.1, 2.8],
+    [0, 0.05, 0, -0.05, 0],
+    T.InterpolateSmooth,
+  ),
 ])
 type Vec = [number, number, number]
 
@@ -165,10 +170,11 @@ function penguin(root: T.Group) {
   )
   body
     .part(ball, cream, [0, 0.88, 0.31], [0.43, 0.61, 0.23])
-    .part(ball, '#f36e3f', [0, 1.27, 0], [0.54, 0.18, 0.51])
+    .part(ball, '#39adaf', [0, 1.27, 0], [0.54, 0.18, 0.51])
+    .part(ball, '#d1eacb', [0, 1.23, 0], [0.54, 0.054, 0.51])
   body.part(
     pebble,
-    coral,
+    '#39adaf',
     [0.44, 1.15, -0.17],
     [0.16, 0.35, 0.14],
     [0, 0, -0.42],
@@ -208,7 +214,7 @@ function gorilla(root: T.Group) {
   const body = new Sculpt().part(ball, fur, [0, 1.01, -0.1], [0.86, 0.86, 0.65])
   body
     .part(ball, tan, [0, 1.06, 0.3], [0.59, 0.53, 0.3])
-    .part(ball, coral, [0, 1.57, 0.02], [0.66, 0.19, 0.46])
+    .part(ball, '#df8a37', [0, 1.57, 0.02], [0.66, 0.19, 0.46])
   root.add(body.mesh())
   const head = new Sculpt().part(ball, fur, [0, 0, 0], [0.63, 0.61, 0.5])
   for (const side of [-1, 1]) {
@@ -239,6 +245,8 @@ function gorilla(root: T.Group) {
     arm
       .part(ball, dark, [side * 0.18, -0.64, 0.11], [0.31, 0.43, 0.36])
       .part(ball, tan, [side * 0.19, -0.91, 0.21], [0.3, 0.2, 0.3])
+      .part(tube, '#e99c49', [side * 0.18, -0.75, 0.14], [0.3, 0.19, 0.35])
+      .part(tube, '#f7d598', [side * 0.18, -0.77, 0.14], [0.303, 0.048, 0.351])
     limb(root, 'arm' + side, [side * 0.71, 1.55, 0], arm)
     limb(
       root,
@@ -300,6 +308,17 @@ export class AnimalModel {
     if (!models.has(animal)) {
       const prototype = new T.Group()
       ;({ elephant, penguin, gorilla, turtle })[animal](prototype)
+      const bib = raceBibs(animal)
+      prototype.add(bib)
+      if (animal === 'elephant') {
+        const headband = new T.Mesh(
+          new T.PlaneGeometry(0.36, 0.17),
+          bib.material,
+        )
+        headband.position.set(0, 0.58, 0.578)
+        headband.rotation.x = -0.22
+        prototype.getObjectByName('head')!.add(headband)
+      }
       models.set(animal, prototype)
     }
     this.model = models.get(animal)!.clone(true)
