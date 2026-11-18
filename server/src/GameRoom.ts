@@ -14,6 +14,8 @@ export class GameRoom {
   countdownTicks = 0
   eventKind: RaceEvent = 'lowGravity'
   eventAt = 0
+  private results: Player[] = []
+  private departedFinishers: Player[] = []
 
   constructor(readonly code: string, readonly practice: boolean) {}
 
@@ -29,6 +31,10 @@ export class GameRoom {
   }
 
   remove(id: string) {
+    if (this.phase === 'RACING') {
+      const finished = this.livePlayers().find(player => player.id === id && player.finishTime !== null)
+      if (finished) this.departedFinishers.push(finished)
+    }
     this.sim.remove(id)
     this.members.delete(id)
     if (id === this.hostId) {
@@ -37,7 +43,9 @@ export class GameRoom {
       if (host) host.ready = true
     }
     if (this.members.size < 2 && !this.practice && this.phase !== 'WAITING') {
-      this.phase = this.phase === 'COUNTDOWN' ? 'WAITING' : 'RESULTS'
+      if (this.phase === 'COUNTDOWN') {
+        this.phase = 'WAITING'; this.countdownTicks = 0
+      } else if (this.phase === 'RACING') this.finish()
     }
   }
 
@@ -57,6 +65,7 @@ export class GameRoom {
       throw new Error('Wait for everyone to ready up.')
     }
     this.sim.reset()
+    this.results = []; this.departedFinishers = []
     this.ticks = 0
     this.countdownTicks = 3 * TICK_RATE
     this.eventKind = Math.random() < 0.5 ? 'lowGravity' : 'bananaRain'
@@ -82,22 +91,25 @@ export class GameRoom {
 
   step() {
     if (this.phase === 'RESULTS') return
+    if (this.phase === 'RACING') this.ticks++
     const event = this.event()
     this.sim.step(this.phase, event?.stage === 'active' ? event.kind : null)
     if (this.phase === 'COUNTDOWN' && --this.countdownTicks <= 0) this.phase = 'RACING'
     else if (this.phase === 'RACING') {
-      this.ticks++
       if (this.ticks >= RACE_LIMIT * TICK_RATE || this.sim.players().every(p => p.finishTime !== null)) {
-        this.phase = 'RESULTS'
+        this.finish()
       }
     }
   }
 
-  snapshot(): Snapshot {
-    const players: Player[] = this.sim.players().map(racer => {
+  private livePlayers(): Player[] {
+    return this.sim.players().map(racer => {
       const { name, ready } = this.members.get(racer.id)!
       return { ...racer, name, ready, place: 0 }
     })
+  }
+
+  private ranked(players: Player[]) {
     players.sort((a, b) => {
       if (a.finishTime !== null && b.finishTime !== null) return a.finishTime - b.finishTime
       if (a.finishTime !== null) return -1
@@ -105,6 +117,16 @@ export class GameRoom {
       return b.checkpoint - a.checkpoint || b.z - a.z
     })
     players.forEach((player, index) => { player.place = index + 1 })
+    return players
+  }
+
+  private finish() {
+    this.phase = 'RESULTS'
+    this.results = this.ranked([...this.departedFinishers, ...this.livePlayers()])
+  }
+
+  snapshot(): Snapshot {
+    const players = this.phase === 'RESULTS' ? this.results : this.ranked(this.livePlayers())
     return { code: this.code, practice: this.practice, hostId: this.hostId, phase: this.phase,
       elapsed: this.ticks / TICK_RATE, countdown: Math.ceil(this.countdownTicks / TICK_RATE),
       timeLimit: RACE_LIMIT, event: this.event(), players }

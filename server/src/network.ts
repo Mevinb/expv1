@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto'
 import type { Server as HttpServer } from 'node:http'
 import { Server } from 'socket.io'
 import { isAnimal } from '@beast/shared/animals'
-import type { ClientEvents, Input, Reply, ServerEvents } from '@beast/shared/protocol'
+import { idleInput, type ClientEvents, type Input, type Reply, type ServerEvents } from '@beast/shared/protocol'
 import { GameRoom, TICK_RATE } from './GameRoom.js'
 
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -26,12 +26,15 @@ export function attachGame(http: HttpServer, automatic = true) {
 
   io.on('connection', socket => {
     let current: GameRoom | undefined
+    let inputExpiry: NodeJS.Timeout | undefined
     function room() {
       if (!current) throw new Error('Join a room first.')
       return current
     }
     function leave() {
       if (!current) return
+      clearTimeout(inputExpiry)
+      inputExpiry = undefined
       const old = current
       current = undefined
       socket.leave(old.code)
@@ -81,7 +84,15 @@ export function attachGame(http: HttpServer, automatic = true) {
     socket.on('rematch', cb => command(cb, () => room().begin(socket.id, true)))
     socket.on('lobby', cb => command(cb, () => room().lobby(socket.id)))
     socket.on('leave', cb => command(cb, leave))
-    socket.on('input', input => { if (current && validInput(input)) current.sim.input(socket.id, input) })
+    socket.on('input', input => {
+      if (!current || !validInput(input)) return
+      current.sim.input(socket.id, input)
+      if (inputExpiry) inputExpiry.refresh()
+      else inputExpiry = setTimeout(() => {
+        current?.sim.input(socket.id, idleInput())
+        inputExpiry = undefined
+      }, 600)
+    })
     socket.on('disconnect', leave)
   })
 

@@ -83,6 +83,10 @@ test('2, 4 and 8 connections see their room; authority, capacity, host transfer 
   const moved = last.get(guest)!.players.find(p => p.id === guest.id)!
   assert.ok(moved.z > initial.players.find(p => p.id === guest.id)!.z + 0.3)
   assert.deepEqual(last.get(guest), last.get(host))
+  // A silent tab must stop moving before the transport times out.
+  await new Promise(resolve => setTimeout(resolve, 650))
+  for (let i = 0; i < 60; i++) game.step()
+  assert.ok(Math.abs(game.snapshot().players.find(p => p.id === guest.id)!.vz) < .1)
   host.disconnect()
   await waitFor(() => last.get(guest)?.hostId === guest.id)
   for (const peer of peers.slice(2, 8)) peer.disconnect()
@@ -161,8 +165,15 @@ test('four network racers finish every checkpoint, agree on results and rematch'
   assert.deepEqual([...seen].sort(), ['active','warning'])
   assert.deepEqual(results.players.map(p => p.place), [1,2,3,4])
   for (const peer of peers) assert.deepEqual(last.get(peer), results)
-  await act(cb => host.emit('rematch', cb))
-  await waitFor(() => peers.every(peer => last.get(peer)?.phase === 'COUNTDOWN'))
-  for (const peer of peers) await act(cb => peer.emit('leave', cb))
+  const winner = peers.find(peer => peer.id === results.players[0].id)!
+  const remaining = peers.filter(peer => peer !== winner)
+  winner.disconnect()
+  await waitFor(() => game.members.size === 3)
+  assert.deepEqual(game.snapshot().players, results.players, 'the podium survives a finisher disconnect')
+  const rematchHost = remaining.find(peer => peer.id === game.hostId)!
+  await act(cb => rematchHost.emit('rematch', cb))
+  await waitFor(() => remaining.every(peer => last.get(peer)?.phase === 'COUNTDOWN'))
+  assert.equal(last.get(rematchHost)?.players.length, 3)
+  for (const peer of remaining) await act(cb => peer.emit('leave', cb))
   assert.equal(service.rooms.size, 0)
 })

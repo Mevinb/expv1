@@ -78,7 +78,11 @@ socket.on('snapshot', frame => {
   ui.update(frame, socket.id); scene?.setSnapshot(frame, socket.id); audio.snapshot(frame, socket.id)
 })
 socket.on('disconnect', () => {
-  if (current) { toMenu(); ui.error('Connection lost. Rejoin your room when the server reconnects.') }
+  if (!current) return
+  const canRejoin = !current.practice && current.phase === 'WAITING'
+  toMenu()
+  ui.error(canRejoin ? 'Connection lost. Rejoin with the room code if the lobby is still open.'
+    : 'Connection lost. Create a new room or rejoin when your friends return to the lobby.')
 })
 socket.connect()
 window.addEventListener('pointerdown', () => audio.unlock(), { once: true })
