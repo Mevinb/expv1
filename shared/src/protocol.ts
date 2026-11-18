@@ -19,7 +19,7 @@ export interface Racer {
   checkpoint: number
   finishTime: number | null
   wildline: { hits: number; chain: number; best: number; burst: number; lastGate: number; verdict: 'hit' | 'miss' | null }
-  stats: { collisions: number; airborne: number; falls: number; biggestFall: number; abilities: number; throws: number; backward: number }
+  stats: { collisions: number; airborne: number; falls: number; biggestFall: number; vents: number; abilities: number; throws: number; backward: number }
 }
 export interface Player extends Racer { name: string; ready: boolean; place: number; bot?: boolean }
 export interface Snapshot {
