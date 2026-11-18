@@ -81,8 +81,10 @@ function localRace(name: string, animal: Animal, cup: boolean) {
   ui.loadingCup(true)
   const fail = (message: string) => { toMenu(); ui.error(message) }
   try {
-    worker = new Worker(new URL('./local/race.worker.ts', import.meta.url), { type: 'module', name: 'wildline-race' })
-    worker.onmessage = ({ data }: MessageEvent<LocalUpdate>) => {
+    const activeWorker = new Worker(new URL('./local/race.worker.ts', import.meta.url), { type: 'module', name: 'wildline-race' })
+    worker = activeWorker
+    activeWorker.onmessage = ({ data }: MessageEvent<LocalUpdate>) => {
+      if (worker !== activeWorker) return
       if (data.type === 'error') {
         if (data.fatal) fail(data.message)
         else ui.error(data.message)
@@ -91,7 +93,9 @@ function localRace(name: string, animal: Animal, cup: boolean) {
       if (!current) { clearTimeout(loadingTimer); ui.loadingCup(false) }
       receive(data.snapshot, LOCAL_ID)
     }
-    worker.onerror = () => fail('The local race could not load. Refresh and try again.')
+    activeWorker.onerror = () => {
+      if (worker === activeWorker) fail('The local race could not load. Refresh and try again.')
+    }
     loadingTimer = setTimeout(() => fail('The race engine took too long to load. Check your connection and try again.'), 45000)
     post({ type: 'launch', name: name.trim() || 'Rookie', animal, cup })
   } catch { fail('This browser could not start a race worker.') }

@@ -12,6 +12,7 @@ function time(seconds: number) {
 export class RacePhoto {
   private readonly film = document.createElement('canvas')
   private priority = -1
+  private pendingPriority = -1
   private caption = ''
   private location = ''
   private captureTime = 0
@@ -19,7 +20,7 @@ export class RacePhoto {
   private generation = 0
 
   reset() {
-    this.priority = -1; this.caption = ''; this.previous = undefined; this.generation++
+    this.priority = this.pendingPriority = -1; this.caption = ''; this.previous = undefined; this.generation++
   }
 
   watch(frame: Snapshot, racer: Player, capture: Capture) {
@@ -34,10 +35,13 @@ export class RacePhoto {
     if (last && last.wildline.burst <= 0 && racer.wildline.burst > 0) { score = 6; caption = 'Wildline burst' }
     if (last && racer.stats.throws > last.stats.throws) { score = 7; caption = 'Air delivery' }
     if (last && racer.stats.vents > last.stats.vents) { score = 8; caption = 'Geyser rider' }
-    if (score <= this.priority) return
+    if (score <= Math.max(this.priority, this.pendingPriority)) return
+    this.pendingPriority = score
     const generation = this.generation
     capture(source => {
-      if (generation !== this.generation || !source.width || !source.height) return
+      if (generation !== this.generation || score !== this.pendingPriority) return
+      this.pendingPriority = -1
+      if (!source.width || !source.height) return
       this.film.width = 1080
       this.film.height = Math.round(1080 * Math.min(1.15, source.height / source.width))
       const ctx = this.film.getContext('2d')
