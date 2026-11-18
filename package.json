@@ -1,0 +1,12 @@
+{
+  "name":"beast-mode-natural-disasters","private":true,"version":"1.0.0","type":"module",
+  "workspaces":["client","server","shared"],"engines":{"node":">=22.12.0"},
+  "scripts":{
+    "dev":"concurrently -k -n server,client \"npm run dev -w @beast/server\" \"npm run dev -w @beast/client\"",
+    "typecheck":"tsc --noEmit",
+    "build":"npm run typecheck && npm run build -w @beast/client",
+    "test":"tsx --test server/test/*.test.ts",
+    "start":"npm run start -w @beast/server"
+  },
+  "devDependencies":{"@types/node":"^22.0.0","concurrently":"^9.2.0","typescript":"~5.9.3","playwright-core":"^1.56.0"}
+}
