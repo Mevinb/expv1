@@ -4,6 +4,8 @@
 
 A desktop-browser party racer for **2–8 players**. Race friends down Jungle Breakdown, a 1.47 km obstacle course with six checkpoints. Grab someone before a bridge, belly-slide down Cannonball Hill, or take your chances with an elephant’s rocket boost. Solo practice runs the same course and physics.
 
+![The Beast Mode clubhouse and jungle starting grid](docs/clubhouse.webp)
+
 ## Play locally
 
 Install **Node.js 22.12 or newer** and run the following from the repository root.
@@ -30,7 +32,7 @@ To play on the same Wi-Fi, friends open the host computer’s LAN IP on port 517
 | Q | Resist a triggered instinct |
 | Esc | Open the race menu |
 
-Settings let you adjust the music, effects, announcer and camera distance. The race continues while a player has a menu open.
+Settings let you adjust the music, effects, announcer and camera distance. The race continues while a player has a menu open. In solo practice, use **Esc → Change racer** to return to the grid.
 
 | Racer | Special | Cooldown |
 | --- | --- | --- |

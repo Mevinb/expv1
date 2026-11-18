@@ -82,7 +82,7 @@ try {
   await capture(host, 'results')
   await host.locator('[data-action=lobby]').click()
   await host.locator('body[data-screen=lobby]').waitFor()
-  await host.locator('[data-action=leave]').click()
+  await host.getByRole('button', { name: 'Leave room', exact: true }).click()
   await host.locator('body[data-screen=menu]').waitFor()
   await host.setViewportSize({ width: 390, height: 844 })
   await capture(host, 'narrow-menu')

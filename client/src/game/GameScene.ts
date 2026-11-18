@@ -503,7 +503,8 @@ export class GameScene {
       focus.z - Math.cos(this.yaw) * length,
     )
     target.y = Math.max(target.y, elevationAt(target.z) + 1)
-    if (this.warming) {
+    const obstructed = this.track?.avoidObstacle(focus, target)
+    if (this.warming || obstructed) {
       this.camera.position.copy(target)
       this.warming = false
     } else this.camera.position.lerp(target, 1 - Math.exp(-dt * 11))

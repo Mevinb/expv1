@@ -633,8 +633,7 @@ function obstacles() {
   })
 }
 export function course() {
-  const group = new T.Group(),
-    random = seeded(72)
+  const group = new T.Group()
   const hues: Record<string, string> = {
     dirt: '#edb972',
     bridge: '#b98754',
@@ -863,5 +862,40 @@ export function course() {
       })
     prevRain = falling
   }
-  return { group, update, stream }
+  const ray = new T.Ray(),
+    bounds = new T.Box3(),
+    hit = new T.Vector3()
+  const blockers = hazards.filter(
+    ({ h }) => h.kind !== 'banana' && h.kind !== 'peel',
+  )
+  function avoidObstacle(origin: T.Vector3, desired: T.Vector3) {
+    const distance = origin.distanceTo(desired)
+    if (distance < 0.01) return false
+    ray.origin.copy(origin)
+    ray.direction.subVectors(desired, origin).divideScalar(distance)
+    let safe = distance
+    for (const { h, mesh } of blockers) {
+      if (Math.abs(mesh.position.z - origin.z) > distance + h.width) continue
+      const c = Math.abs(Math.cos(mesh.rotation.y)),
+        s = Math.abs(Math.sin(mesh.rotation.y))
+      const hx = (h.width * c + h.depth * s) * 0.5 + 0.12,
+        hz = (h.width * s + h.depth * c) * 0.5 + 0.12
+      bounds.min.set(
+        mesh.position.x - hx,
+        mesh.position.y - h.height * 0.5 - 0.12,
+        mesh.position.z - hz,
+      )
+      bounds.max.set(
+        mesh.position.x + hx,
+        mesh.position.y + h.height * 0.5 + 0.12,
+        mesh.position.z + hz,
+      )
+      if (!bounds.containsPoint(origin) && ray.intersectBox(bounds, hit))
+        safe = Math.min(safe, Math.max(0.8, origin.distanceTo(hit) - 0.22))
+    }
+    if (safe >= distance) return false
+    ray.at(safe, desired)
+    return true
+  }
+  return { group, update, stream, avoidObstacle }
 }
