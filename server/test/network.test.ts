@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { once } from 'node:events'
 import { io, type Socket } from 'socket.io-client'
+import { centerAt, CHECKPOINTS } from '@beast/shared/track'
 import { idleInput, type ClientEvents, type Reply, type ServerEvents, type Snapshot } from '@beast/shared/protocol'
 import { attachGame } from '../src/network.js'
 import { initPhysics } from '../src/Simulation.js'
@@ -24,7 +25,9 @@ async function connect() {
   const client: Client = io('http://127.0.0.1:' + (http.address() as AddressInfo).port,
     { transports: ['websocket'], forceNew: true, reconnection: false, autoConnect: false })
   client.on('snapshot', snapshot => last.set(client, snapshot))
-  const connected = once(client, 'connect')
+  const connected = new Promise<void>((resolve, reject) => {
+    client.once('connect', resolve); client.once('connect_error', reject)
+  })
   client.connect()
   await connected
   clients.push(client)
@@ -110,5 +113,52 @@ test('practice stays private, runs a single racer and cleans up on exit', async 
   const { code } = last.get(a)!
   await act(cb => b.emit('join', { code, name: 'Observer' }, cb), false)
   await act(cb => a.emit('leave', cb))
+  assert.equal(service.rooms.size, 0)
+})
+
+test('four network racers finish every checkpoint, agree on results and rematch', async () => {
+  const peers = await Promise.all(Array.from({ length: 4 }, connect))
+  const [host] = peers
+  await act(cb => host.emit('create', { name: 'Elephant' }, cb))
+  await waitFor(() => last.has(host))
+  const game = service.rooms.get(last.get(host)!.code)!
+  for (const [i, peer] of peers.slice(1).entries()) {
+    await act(cb => peer.emit('join', { name: ['Penguin','Gorilla','Turtle'][i], code: game.code }, cb))
+    await act(cb => peer.emit('ready', true, cb))
+  }
+  await act(cb => host.emit('start', cb))
+  const seen = new Set<string>()
+  for (let batch = 0; batch < 1240 && game.phase !== 'RESULTS'; batch++) {
+    // Clients steer using only previously broadcast positions. Fast-forward six
+    // ordinary simulation ticks at a time to keep a two-minute race cheap in CI.
+    const before = game.ticks
+    for (const [i, peer] of peers.entries()) {
+      const p = last.get(peer)?.players.find(player => player.id === peer.id)
+      if (!p || p.finishTime !== null) continue
+      const z = p.z + 5
+      const lane = z < 205 ? 8.7 : z < 438 ? -8.5 : z < 670 ? 0 : z < 921 ? -10.3 : 8.7
+      const offset = (i % 2 === 0 ? 1 : -1) * .75
+      const x = Math.max(-1, Math.min(1, (p.x - centerAt(z) - lane - offset) / 3))
+      peer.emit('input', { ...idleInput(), z: 1, x, sprint: true })
+    }
+    // An ordered event on each transport confirms its input arrived at the server.
+    await Promise.all(peers.map(peer => act(cb => peer.emit('ready', true, cb), false)))
+    for (let t = 0; t < 6; t++) service.step()
+    const event = game.event()
+    if (event) seen.add(event.stage)
+    if (game.ticks > before) {
+      await waitFor(() => (last.get(host)?.elapsed ?? -1) >= (game.ticks - 1) / 30)
+    }
+  }
+  await waitFor(() => peers.every(peer => last.get(peer)?.phase === 'RESULTS'))
+  const results = last.get(host)!
+  assert.ok(results.players.every(p => p.checkpoint === CHECKPOINTS.length && p.finishTime !== null),
+    JSON.stringify(results.players.map(p => [p.name, p.checkpoint, p.z, p.stats.falls])))
+  assert.deepEqual([...seen].sort(), ['active','warning'])
+  assert.deepEqual(results.players.map(p => p.place), [1,2,3,4])
+  for (const peer of peers) assert.deepEqual(last.get(peer), results)
+  await act(cb => host.emit('rematch', cb))
+  await waitFor(() => peers.every(peer => last.get(peer)?.phase === 'COUNTDOWN'))
+  for (const peer of peers) await act(cb => peer.emit('leave', cb))
   assert.equal(service.rooms.size, 0)
 })
