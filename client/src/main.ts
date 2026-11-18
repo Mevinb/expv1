@@ -17,16 +17,18 @@ const controls = new Set(['KeyW','KeyS','KeyA','KeyD','ArrowUp','ArrowDown','Arr
 let scene: GameScene | undefined
 let current: Snapshot | undefined
 let paused = false
+let windowBlurred = false
 let cameraDistance = 8
 let worker: Worker | undefined
 let loadingTimer: ReturnType<typeof setTimeout> | undefined
 let pending = false
 
 function post(command: LocalCommand) { worker?.postMessage(command) }
+function racePaused() { return paused || document.hidden || (!!worker && windowBlurred) }
 function movement(neutral = false) {
   if (!current || (!worker && !socket.connected)) return
   const input = idleInput()
-  if (!neutral && !paused && !document.hidden && (current.phase === 'WAITING' || current.phase === 'RACING')) {
+  if (!neutral && !racePaused() && (current.phase === 'WAITING' || current.phase === 'RACING')) {
     const { input: pad, brake } = touch.read()
     const key = (...codes: string[]) => codes.some(code => held.has(code) || pressed.has(code))
     const forward = key('KeyW','ArrowUp'), backward = key('KeyS','ArrowDown')
@@ -46,7 +48,7 @@ function movement(neutral = false) {
 }
 function clearKeys() { held.clear(); pressed.clear(); touch.clear(); movement(true) }
 function applyPause() {
-  const stopped = paused || document.hidden
+  const stopped = racePaused()
   clearKeys(); scene?.setPaused(stopped)
   post({ type: 'pause', paused: stopped })
   updateTouch()
@@ -54,7 +56,7 @@ function applyPause() {
 function updateTouch() {
   const id = worker ? LOCAL_ID : socket.id
   const me = current?.players.find(p => p.id === id)
-  touch.show(me, !paused && !document.hidden && (current?.phase === 'RACING' || current?.phase === 'WAITING'), !!current?.cup)
+  touch.show(me, !racePaused() && (current?.phase === 'RACING' || current?.phase === 'WAITING'), !!current?.cup)
 }
 function toMenu() {
   worker?.terminate(); worker = undefined
@@ -156,14 +158,15 @@ window.addEventListener('keydown', event => {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
   if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) ui.togglePause(); return }
   if (target instanceof HTMLElement && (target.matches('input, textarea, select') || target.isContentEditable)) return
-  if (!current || paused || ui.isOverlayOpen() || !controls.has(event.code)) return
+  if (!current || racePaused() || ui.isOverlayOpen() || !controls.has(event.code)) return
   if (event.code === 'Space' && target instanceof HTMLButtonElement && current.phase === 'WAITING') return
   event.preventDefault()
   if (!held.has(event.code)) pressed.add(event.code)
   held.add(event.code)
 })
 window.addEventListener('keyup', event => held.delete(event.code))
-window.addEventListener('blur', clearKeys)
+window.addEventListener('blur', () => { windowBlurred = true; applyPause() })
+window.addEventListener('focus', () => { windowBlurred = false; applyPause() })
 document.addEventListener('visibilitychange', applyPause)
 const heartbeat = window.setInterval(movement, 1000 / 30)
 if (import.meta.hot) import.meta.hot.dispose(() => {
