@@ -15,6 +15,7 @@ async function capture(page, name) {
   if (out) await page.screenshot({ path: out + '/' + name + '.png', timeout: 45000 })
 }
 async function enter(page, kind, name, code) {
+  console.log(kind, name)
   await page.locator('[data-action=' + kind + ']').click()
   await page.locator('input[name=nickname]').fill(name)
   if (code) await page.locator('input[name=code]').fill(code)
@@ -22,8 +23,10 @@ async function enter(page, kind, name, code) {
   await page.locator('body[data-screen=lobby]').waitFor()
 }
 try {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
   for (let i = 0; i < 4; i++) {
-    const page = await browser.newPage({ viewport: i === 0 ? { width: 1280, height: 800 } : { width: 800, height: 600 } })
+    const page = await context.newPage()
+    if (i > 0) await page.setViewportSize({ width: 800, height: 600 })
     page.setDefaultTimeout(45000)
     page.on('pageerror', err => errors.push(err.message))
     page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()) })
@@ -32,6 +35,7 @@ try {
     pages.push(page)
   }
   const [host, guest, third, fourth] = pages
+  console.log('Four browser tabs opened')
   await host.bringToFront()
   assert.match(await host.title(), /Beast Mode/)
   await capture(host, 'menu')
@@ -59,13 +63,14 @@ try {
   await capture(host, 'lobby')
   await host.locator('[data-action=start]').click()
   await Promise.all(pages.map(p => p.locator('body[data-screen=race]').waitFor()))
-  await host.waitForFunction(() => !document.getElementById('count')?.textContent, {timeout: 20000})
+  await host.waitForFunction(() => !document.getElementById('count')?.textContent, undefined, {timeout: 20000})
   await host.keyboard.down('w'); await host.keyboard.down('Shift')
   await host.keyboard.down('Space'); await host.waitForTimeout(180); await host.keyboard.up('Space')
   await host.keyboard.down('e'); await host.waitForTimeout(220); await host.keyboard.up('e')
   await host.waitForFunction(() => document.getElementById('cool')?.textContent !== 'Ready')
   await host.waitForFunction(() => Number(document.getElementById('progress')?.value) > .001)
   await host.keyboard.up('w'); await host.keyboard.up('Shift')
+  console.log('Observed running race and validated movement and ability HUD')
   await capture(host, 'race')
   await host.keyboard.press('Escape')
   await host.locator('dialog').waitFor()
