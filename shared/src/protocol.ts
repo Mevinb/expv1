@@ -18,7 +18,7 @@ export interface Racer {
   resistance: number
   checkpoint: number
   finishTime: number | null
-  stats: { collisions: number; airborne: number; falls: number; abilities: number; throws: number; backward: number }
+  stats: { collisions: number; airborne: number; falls: number; biggestFall: number; abilities: number; throws: number; backward: number }
 }
 export interface Player extends Racer { name: string; ready: boolean; place: number }
 export interface Snapshot {

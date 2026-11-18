@@ -1,1 +1,17 @@
-{"name":"@beast/server","private":true,"version":"1.0.0","type":"module","scripts":{"dev":"tsx watch src/index.ts","start":"tsx src/index.ts"},"dependencies":{"@beast/shared":"*","@dimforge/rapier3d-compat":"~0.19.1","socket.io":"^4.8.1","tsx":"^4.20.6","sirv":"^3.0.2"}}
+{
+  "name": "@beast/server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@beast/shared": "*",
+    "@dimforge/rapier3d-compat": "~0.19.1",
+    "socket.io": "^4.8.1",
+    "tsx": "^4.20.6",
+    "sirv": "^3.0.2"
+  }
+}
