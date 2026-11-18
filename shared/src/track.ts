@@ -1,6 +1,11 @@
 // Distances are in metres. The course runs toward positive Z.
 export const START_Z = 0;
 export const FINISH_Z = 1472;
+// Leave open headroom where the lower route rises to meet the course.
+export const BRIDGE_DECK_END = 632;
+export function recoveryDrop(z: number) {
+  return Math.max(0, Math.min(3.3, (z - 456) / 6, (664 - z) / 8));
+}
 export const ZONES = [
   { name: 'Starting Stampede', start: -32, end: 216 },
   { name: 'Banana Boulevard', start: 216, end: 456 },
@@ -68,12 +73,13 @@ for (let start = -32; start < FINISH_Z + 40; start += 8) {
     for (const side of [-1, 1]) patch(z, x + side * (divider + laneWidth / 2), laneWidth, y0, y1, 'dirt');
   } else {
     const surface = (['dirt', 'dirt', 'bridge', 'mud', 'rock', 'dirt'] as const)[zone];
-    patch(z, x, halfWidthAt(z) * 2, y0, y1, surface);
+    if (surface !== 'bridge' || start < BRIDGE_DECK_END) {
+      patch(z, x, halfWidthAt(z) * 2, y0, y1, surface);
+    }
   }
   // A wider net of mossy ledges returns fallen racers to the bridge exit.
   if (zone === 2) {
-    const drop = (s: number) => Math.min(3.3, Math.max(0, (s - 456) / 6), Math.max(0, (664 - s) / 8));
-    patch(z, x, 25, y0 - drop(start) - 0.09, y1 - drop(start + 8) - 0.09, 'grass');
+    patch(z, x, 25, y0 - recoveryDrop(start) - 0.09, y1 - recoveryDrop(start + 8) - 0.09, 'grass');
   }
   // Optional launch lips on the outside of Cannonball Hill. The inside lane stays level.
   if (zone === 4 && start >= 1064 && start < 1080) {

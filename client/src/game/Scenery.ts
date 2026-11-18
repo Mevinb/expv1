@@ -12,6 +12,8 @@ import {
 import { AnimalModel } from './Animals.js'
 import {
   bridgeSag,
+  BRIDGE_DECK_END,
+  recoveryDrop,
   centerAt,
   elevationAt,
   FINISH_Z,
@@ -705,12 +707,12 @@ export function course() {
     }
     for (let z = start; z < Math.min(start + 104, FINISH_Z + 40); z += 8) {
       const x = centerAt(z),
-        y = elevationAt(z),
+        y = elevationAt(z) - (z >= BRIDGE_DECK_END ? recoveryDrop(z) : 0),
         width = halfWidthAt(z)
       for (const side of [-1, 1]) {
         if (z % 24 === 0)
           stamp(map, prototypes.marker, x + side * (width - 0.15), y, z, 1)
-        if (width < 6 && z % 16 === 0) {
+        if (width < 6 && z < BRIDGE_DECK_END && z % 16 === 0) {
           road.part(
             tube,
             '#956c44',

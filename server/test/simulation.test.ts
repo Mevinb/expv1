@@ -231,3 +231,21 @@ test('boosting into a moving barrier ends the rocket and steering recovers', () 
   tick(s, 36)
   assert.ok(s.players()[0].vx > 1)
 })
+
+test('a racer underneath Suspicious Bridge can follow the middle of the recovery lane to the exit', () => {
+  const sim = race()
+  let belowDeck = false
+  for (let frame = 0; frame < 3800; frame++) {
+    const p = sim.players()[0]
+    if (p.z < 453) followCourse(sim, p, 0)
+    else {
+      const target = centerAt(p.z + 4) + (p.z < 525 ? 9 : 0)
+      control(sim, { z: 1, sprint: true, x: Math.max(-1, Math.min(1, (p.x - target) / 2)) })
+      if (p.z > 540 && p.z < 620 && p.y < elevationAt(p.z) - 1.5) belowDeck = true
+    }
+    if (p.checkpoint >= 3) break
+    tick(sim)
+  }
+  assert.ok(belowDeck, 'the racer used the lower route')
+  assert.ok(sim.players()[0].checkpoint >= 3, JSON.stringify(sim.players()[0]))
+})
