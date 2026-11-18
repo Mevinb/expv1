@@ -112,6 +112,10 @@ test('practice stays private, runs a single racer and cleans up on exit', async 
   await waitFor(() => last.get(a)?.phase === 'COUNTDOWN')
   const { code } = last.get(a)!
   await act(cb => b.emit('join', { code, name: 'Observer' }, cb), false)
+  await act(cb => a.emit('lobby', cb))
+  await act(cb => a.emit('select', 'turtle', cb))
+  await act(cb => a.emit('start', cb))
+  await waitFor(() => last.get(a)?.phase === 'COUNTDOWN' && last.get(a)?.players[0].animal === 'turtle')
   await act(cb => a.emit('leave', cb))
   assert.equal(service.rooms.size, 0)
 })

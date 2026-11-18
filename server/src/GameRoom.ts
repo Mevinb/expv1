@@ -66,7 +66,7 @@ export class GameRoom {
 
   lobby(id: string) {
     this.requireHost(id)
-    this.requirePhase('RESULTS')
+    if (!this.practice || this.phase === 'WAITING') this.requirePhase('RESULTS')
     this.sim.reset()
     this.ticks = this.countdownTicks = 0
     this.phase = 'WAITING'
