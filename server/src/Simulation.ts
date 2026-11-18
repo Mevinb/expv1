@@ -4,6 +4,7 @@ import { ANIMALS } from '../../shared/src/animals.js'
 import { idleInput, type Animal, type Input, type Phase, type RaceEvent, type Racer } from '../../shared/src/protocol.js'
 import { START_Z, CHECKPOINTS, ROAD, HAZARDS, bridgeSag, centerAt, elevationAt, hazardPose, rainDrop, zoneAt, type Hazard, type RoadPatch } from '../../shared/src/track.js'
 
+import { STEAM_VENTS, ventState } from '../../shared/src/vents.js'
 import { crossWildline, freshWildline } from './Wildline.js'
 import { gateCrossing } from './checkpoints.js'
 
@@ -32,7 +33,7 @@ interface Driver {
   seenPickups: Set<string>
 }
 type Prop = { hazard: Hazard; body: RAPIER.RigidBody }
-const newStats = () => ({ collisions: 0, airborne: 0, falls: 0, biggestFall: 0, abilities: 0, throws: 0, backward: 0 })
+const newStats = () => ({ collisions: 0, airborne: 0, falls: 0, biggestFall: 0, vents: 0, abilities: 0, throws: 0, backward: 0 })
 
 export class Simulation {
   private world = new RAPIER.World({ x: 0, y: -24, z: 0 })
@@ -341,6 +342,29 @@ export class Simulation {
     }
   }
 
+  private launchFromVent(d: Driver) {
+    if (!d.state.grounded || d.heldBy || d.state.finishTime !== null) return
+    const p = d.body.translation()
+    for (const vent of STEAM_VENTS) {
+      if (Math.abs(vent.z - p.z) > vent.radius || Math.hypot(p.x - vent.x, p.z - vent.z) > vent.radius ||
+          Math.abs(p.y - FOOT - vent.y) > 0.9) continue
+      const key = 'vent-' + vent.id
+      // Each animal can ride each vent once per race, including after a fall.
+      if (d.seenPickups.has(key) || ventState(vent, this.ticks * DT).stage !== 'erupting') return
+      d.seenPickups.add(key)
+      const tangent = (centerAt(vent.z + 4) - centerAt(vent.z - 4)) / 8
+      const velocity = d.body.linvel()
+      d.body.setLinvel({
+        x: clamp(tangent * 18 + velocity.x * .25, -7, 7),
+        y: 12.4,
+        z: clamp(Math.max(22.5, velocity.z + 6.5), 22.5, 29),
+      }, true)
+      d.state.stats.vents++
+      d.state.grounded = false
+      return
+    }
+  }
+
   private tickRain() {
     for (const d of this.drivers.values()) {
       for (let i = 0; i < 21; i++) {
@@ -422,8 +446,10 @@ export class Simulation {
     }
     this.previousEvent = event
     for (const d of this.drivers.values()) {
-      if (d.state.finishTime === null) this.drive(d)
-      else d.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      if (d.state.finishTime === null) {
+        this.drive(d)
+        if (racing) this.launchFromVent(d)
+      } else d.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
       d.pressed.jump = d.pressed.interact = d.pressed.ability = false
     }
     this.world.step(this.queue)
