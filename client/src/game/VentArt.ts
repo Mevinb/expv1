@@ -5,7 +5,43 @@ import { box, pebble, Sculpt } from './Art.js'
 
 const disc = new T.CylinderGeometry(1, 1, 1, 14)
 const pool = new T.CylinderGeometry(0.9, 1, 1, 14)
-const plumePaint = new T.MeshBasicMaterial({ color: 'white' })
+const puffQuad = new T.PlaneGeometry(2, 2)
+function steamPaint() {
+  const stamp = document.createElement('canvas')
+  stamp.width = stamp.height = 64
+  const ctx = stamp.getContext('2d')!
+  for (const [x, y, r] of [
+    [29, 37, 21],
+    [20, 27, 15],
+    [39, 25, 18],
+    [45, 36, 15],
+    [30, 19, 13],
+  ]) {
+    const halo = ctx.createRadialGradient(x, y, r * 0.57, x, y, r)
+    halo.addColorStop(0, 'rgba(255,255,255,.83)')
+    halo.addColorStop(0.64, 'rgba(255,255,255,.68)')
+    halo.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = halo
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  const material = new T.MeshBasicMaterial({
+    map: new T.CanvasTexture(stamp),
+    transparent: true,
+    opacity: 0.76,
+    depthWrite: false,
+  })
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <project_vertex>',
+      `
+      vec4 mvPosition=modelViewMatrix*vec4(instanceMatrix[3].xyz,1.);
+      mvPosition.xy+=position.xy*vec2(length(instanceMatrix[0].xyz),length(instanceMatrix[1].xyz));
+      gl_Position=projectionMatrix*mvPosition;
+    `,
+    )
+  }
+  return material
+}
 const transform = new T.Object3D()
 const phaseColor = new T.Color()
 const water = new T.Color('#39c9ca')
@@ -14,6 +50,7 @@ const steam = new T.Color('#d1fff2')
 
 /** The basin fits the exact launch radius. Its glow, bubbles and jet share the physics clock. */
 export function steamFields(parent: T.Group) {
+  const plumePaint = steamPaint()
   const fields = STEAM_VENTS.map((vent) => {
     const { x, y, z, radius } = vent
     const root = new T.Group()
@@ -67,14 +104,14 @@ export function steamFields(parent: T.Group) {
     basin.position.y = 0.13
     basin.scale.set(radius * 0.91, 0.09, radius * 0.91)
     root.add(basin)
-    const puffs = new T.InstancedMesh(pebble, plumePaint, 18)
+    const puffs = new T.InstancedMesh(puffQuad, plumePaint, 18)
     puffs.instanceMatrix.setUsage(T.DynamicDrawUsage)
     puffs.frustumCulled = false
     for (let i = 0; i < 18; i++)
       puffs.setColorAt(
         i,
         new T.Color(
-          i % 4 === 0 ? '#9ce1d7' : i % 3 === 0 ? '#dfefd8' : '#fff6df',
+          i % 4 === 0 ? '#9ce1d7' : i % 3 === 0 ? '#c5dfd8' : '#e5efdf',
         ),
       )
     root.add(puffs)
@@ -106,7 +143,7 @@ export function steamFields(parent: T.Group) {
           (elapsed * (erupting ? 0.97 : warning ? 1.63 : 0.58) + i * 0.381966) %
           1
         const angle = i * 2.4 + age * 0.6
-        const spread = erupting ? 0.3 + age * 1.03 : 1.1
+        const spread = erupting ? 0.3 + age * 1.36 : 1.1
         const height = erupting
           ? 0.17 + age * (0.65 + jet * 6.6)
           : 0.18 + Math.sin(age * Math.PI) * (warning ? 0.98 : 0.27)

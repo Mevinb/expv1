@@ -1030,10 +1030,10 @@ export function course() {
     const eruption = updateVents(t, viewer.z)
     volcano.group.position.set(
       centerAt(viewer.z) * 0.25 - 41 + 11 * Math.sin(viewer.z / 260),
-      -7 + hill * 17,
-      viewer.z + 128,
+      -7 + hill * 9,
+      viewer.z + 128 + hill * 12,
     )
-    volcano.group.scale.setScalar(1 + hill * 0.28)
+    volcano.group.scale.setScalar(1 + hill * 0.10)
     volcano.update(visualTime, eruption)
     balloons.forEach((b, i) => {
       b.position.y =

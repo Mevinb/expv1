@@ -81,6 +81,7 @@ export class Broadcast {
       '--rev',
       Math.min(100, Math.hypot(me.vx, me.vz) * 5) + '%',
     )
+    const touch = document.body.classList.contains('touch-driving')
     const grab = me.animal === 'gorilla'
     this.text('ability-key', grab && !me.active ? 'F' : 'E')
     this.text(
@@ -97,7 +98,9 @@ export class Broadcast {
     )
     this.text(
       'instinct',
-      me.instinct ? 'Q · Resist ' + me.instinct : 'Instinct resistance',
+      me.instinct
+        ? (touch ? 'Resist ' : 'Q · Resist ') + me.instinct
+        : 'Instinct resistance',
     )
     this.meter('resist', me.resistance)
     const targetYaw = Math.atan2(centerAt(me.z + 10) - me.x, 10) - me.yaw
@@ -190,7 +193,6 @@ export class Broadcast {
       ? this.callStyle
       : 'disaster'
     this.text('event', call)
-    const touch = document.body.classList.contains('touch-driving')
     const coast = s.cup
       ? touch
         ? 'Steer with the pad · Pull back to brake'
@@ -219,10 +221,10 @@ export class Broadcast {
               ? 'Three gold gates in a row trigger a burst'
               : s.elapsed < 24
                 ? touch
-                  ? 'Tap your special to shake up the pack'
+                  ? 'Tap Jump to clear a gap · Special activates your ability'
                   : grab
                     ? 'F grabs a nearby racer · E throws'
-                    : 'E activates ' + ANIMALS[me.animal].special
+                    : 'Space jumps · E activates ' + ANIMALS[me.animal].special
                 : '',
     )
     const lineup =

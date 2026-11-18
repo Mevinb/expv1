@@ -1,5 +1,6 @@
 import { ANIMALS } from '@beast/shared/animals'
 import type { Animal, Player, Snapshot } from '@beast/shared/protocol'
+import { FINISH_Z } from '@beast/shared/track'
 import { WILDLINE_GATES } from '@beast/shared/wildlines'
 import { animalPortrait } from '../game/Portrait.js'
 import { icon } from './icons.js'
@@ -96,12 +97,19 @@ export function cupMenu(header: string, selected: Animal, online: boolean) {
 
 export function cupResults(s: Snapshot, me: Player, isRecord: boolean) {
   const sorted = [...s.players].sort((a, b) => a.place - b.place)
+  const classification = (p: Player) => {
+    const mark =
+      p.finishTime === null
+        ? Math.max(0, Math.round(FINISH_Z - p.z)) + ' m to go'
+        : raceTime(p.finishTime, true)
+    return p.id === me.id ? 'You · ' + mark : mark
+  }
   const podium = sorted
     .slice(0, 3)
     .map(
       (r) =>
         `<li class="podium-p${r.place}" style="--coat:${ANIMALS[r.animal].color}"><div class="podium-animal"><img alt="" src="${animalPortrait(r.animal)}"></div><div class="podium-name">
-       <b>${String(r.place).padStart(2, '0')}</b><strong>${escapeText(r.name)}</strong><small>${r.id === me.id ? 'You' : ANIMALS[r.animal].name}</small></div></li>`,
+       <b>${String(r.place).padStart(2, '0')}</b><strong>${escapeText(r.name)}</strong><small>${classification(r)}</small></div></li>`,
     )
     .join('')
   const best = personalBest(me.animal)
@@ -114,7 +122,7 @@ export function cupResults(s: Snapshot, me: Player, isRecord: boolean) {
       .slice(3)
       .map(
         (p) =>
-          `<div class="fourth-place"><b>${ordinal(p.place)}</b> ${escapeText(p.name)} <span>${p.id === me.id ? 'You' : ANIMALS[p.animal].name}</span></div>`,
+          `<div class="fourth-place"><b>${ordinal(p.place)}</b> ${escapeText(p.name)} <span>${classification(p)}</span></div>`,
       )
       .join('')}
     <div class="run-stats">

@@ -1278,3 +1278,38 @@ body.touch-driving .race-instruction {
     overflow: hidden;
   }
 }
+
+body.touch-driving .ability-readout kbd {
+  display: none;
+}
+@media (max-width: 640px) and (orientation: landscape) {
+  .race-ticket h1 {
+    font-size: clamp(20px, 11cqw, 36px);
+  }
+  .race-ticket .cup-launch > span {
+    display: none;
+  }
+  .race-ticket .cup-launch strong {
+    white-space: nowrap;
+  }
+  .location-tape {
+    left: 5px;
+    padding: 3px 6px 3px 3px;
+    gap: 4px;
+  }
+  .location-tape .map-pin {
+    width: 27px;
+    height: 27px;
+  }
+  .location-tape div > strong {
+    font-size: 15px;
+  }
+  .location-tape div > small {
+    font-size: 7px;
+  }
+  .location-tape > b {
+    font-size: 13px;
+    margin-left: 2px;
+    padding-left: 4px;
+  }
+}
