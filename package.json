@@ -18,7 +18,8 @@
     "test": "tsx --test server/test/*.test.ts",
     "start": "npm run start -w @beast/server",
     "test:browser": "node scripts/browser-smoke.mjs",
-    "build:showcase": "npm run typecheck && npm run build -w @beast/client -- --mode showcase"
+    "build:showcase": "npm run typecheck && npm run build -w @beast/client -- --mode showcase",
+    "test:cup": "tsx scripts/cup-playtest.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

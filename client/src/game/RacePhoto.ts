@@ -3,7 +3,10 @@ import type { Player, Snapshot } from '@beast/shared/protocol'
 import { ZONES, zoneAt } from '@beast/shared/track'
 
 type Capture = (draw: (canvas: HTMLCanvasElement) => void) => void
-const time = (seconds: number) => Math.floor(seconds / 60) + ':' + (seconds % 60).toFixed(2).padStart(5, '0')
+function time(seconds: number) {
+  const hundredths = Math.floor(seconds * 100)
+  return Math.floor(hundredths / 6000) + ':' + String(Math.floor(hundredths / 100) % 60).padStart(2, '0') + '.' + String(hundredths % 100).padStart(2, '0')
+}
 
 /** Keep one uncompressed frame in memory. Encode only when the player saves their print. */
 export class RacePhoto {

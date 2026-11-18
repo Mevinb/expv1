@@ -1,10 +1,18 @@
-# Beast Mode · Natural Disasters
+# Beast Mode · Wildline Cup
 
-*Evolution was a mistake. Now it’s a race.*
+A four-animal arcade race across a volcanic island. Skid belly-slides, Bruno throws rivals, Marble rolls through the pack, and Boomer has a rocket-powered digestive problem. Pick an animal to take its place on the starting grid.
 
-A desktop-browser party racer for **2–8 players**. Race friends down Jungle Breakdown, a 1.47 km obstacle course with six checkpoints. Grab someone before a bridge, belly-slide down Cannonball Hill, or take your chances with an elephant’s rocket boost. Solo practice runs the same course and physics.
+**[Play the Wildline Cup in your browser](https://mevinb.github.io/expv1/)**
 
-![The Beast Mode clubhouse and jungle starting grid](docs/clubhouse.webp)
+![Wildline Cup starting grid](docs/clubhouse.webp)
+
+## Race the Cup
+
+Click **Race the cup** to start against three CPU rivals. Your racer sprints automatically. Steer with **A/D** or the arrow keys, brake with **S/↓**, jump with **Space**, and use your special with **E**. On a touchscreen, drag the steering pad sideways, pull down to brake, and tap the action buttons.
+
+Thread three consecutive golden gates to earn a **2.2-second Wildline burst**. There are 24 optional gates and six required checkpoints. Follow the warning bubbles to catch an erupting steam vent for an airborne shortcut. A missed gold gate breaks your chain. Falling returns you to the last checkpoint.
+
+Your rivals use the same movement, cooldowns, collisions and route choices as you. At the finish, check the podium and your best chain, save a race photo, or race again. Personal bests are stored on this browser for each animal. The Cup and solo practice load the Rapier simulation in a local Web Worker. Private rooms use a shared Node.js server.
 
 ## Play locally
 
@@ -32,7 +40,7 @@ To play on the same Wi-Fi, friends open the host computer’s LAN IP on port 517
 | Q | Resist a triggered instinct |
 | Esc | Open the race menu |
 
-Settings let you adjust the music, effects, announcer and camera distance. The race continues while a player has a menu open. In solo practice, use **Esc → Change racer** to return to the grid.
+Settings let you adjust the music, effects, announcer and camera distance. Opening the race menu pauses the local Cup or solo practice. Private-room races continue while one player has a menu open. In solo practice, use **Esc → Change racer** to return to the grid.
 
 | Racer | Special | Cooldown |
 | --- | --- | --- |
@@ -43,7 +51,7 @@ Settings let you adjust the music, effects, announcer and camera distance. The r
 
 ## Race rules
 
-Cross the gates in order. Falling returns you to the last checkpoint. The server warns the field before one eight-second Low Gravity or Banana Rain event. A race ends when everyone finishes, after four minutes, or when a multiplayer field drops below two racers. Finished racers place first by crossing time. Unfinished racers are ranked by their last checkpoint and progress along the course. The host can start a rematch with the same animals or return everyone to the lobby.
+Cross the six checkpoints in order. Falling returns you to the last checkpoint. The server warns the field before one eight-second Low Gravity or Banana Rain event. A race ends when everyone finishes, after four minutes, or when a multiplayer field drops below two racers. Finished racers place first by crossing time. Unfinished racers are ranked by their last checkpoint and progress along the course. The host can start a rematch with the same animals or return everyone to the lobby. The solo Cup settles the field two seconds after the human finishes, or sooner if everyone has crossed.
 
 Rooms are in memory. A disconnect removes that racer and transfers hosting to the next player when needed. Rejoin with the code while the room is waiting. An empty room closes.
 
@@ -56,14 +64,16 @@ npm run build
 npm start
 ```
 
-After the build, **http://localhost:3001** serves both the game and Socket.IO. Set `PORT` to change the server port or `HOST` to change its listen address. The browser and server must share an origin, including the `/socket.io` endpoint.
+After the build, **http://localhost:3001** serves both the game and Socket.IO. Set `PORT` to change the server port or `HOST` to change its listen address. For multiplayer the browser and server share an origin, including the `/socket.io` endpoint.
 
-With the game running and Google Chrome installed, run `npm run test:browser` in a second terminal for a four-tab smoke test. Set `CHROME_PATH` for a different Chromium binary, `GAME_URL` for a different game origin, and `SCREENSHOT_DIR` to save the rendered screens.
+For the static, server-free Cup and practice build, run `npm run build:showcase` and serve `client/dist` at `/expv1/`. GitHub Actions publishes this build to Pages after tests pass on main.
+
+With the game running and Google Chrome installed, run `npm run test:browser` in a second terminal for a four-tab smoke test. Use `npm run test:cup` for a full browser race, including a three-gate burst, pause, personal best, photo export and rematch. Set `CHROME_PATH` for a different Chromium binary, `GAME_URL` for a different game origin, and `SCREENSHOT_DIR` to save the rendered screens.
 
 ## Project layout
 
 - **client/** — Vite and vanilla TypeScript. Three.js draws the animals, track and effects. Web Audio synthesizes the music and sounds.
-- **server/** — Node.js, Socket.IO and Rapier 3D. The server simulates movement at 30 Hz and broadcasts snapshots at 15 Hz. It owns collisions, special cooldowns, event timing, checkpoints and finish order.
+- **server/** — Node.js, Socket.IO and Rapier 3D. The simulation advances at 30 Hz and publishes snapshots at 15 Hz. Multiplayer uses the server as the authority for collisions, special cooldowns, event timing, checkpoints and finish order.
 - **shared/** — Typed network protocol, animal configuration, course geometry and moving hazard trajectories.
 - **server/test/** — Physics regression tests and real Socket.IO clients driving accelerated races through the normal input protocol.
 - **scripts/browser-smoke.mjs** — Browser interaction checks for settings, joining, ready states, driving, race UI and disconnect handling.
