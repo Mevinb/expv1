@@ -18,11 +18,12 @@ export interface Racer {
   resistance: number
   checkpoint: number
   finishTime: number | null
-  stats: { collisions: number; airborne: number; falls: number; biggestFall: number; abilities: number; throws: number; backward: number }
+  wildline: { hits: number; chain: number; best: number; burst: number; lastGate: number; verdict: 'hit' | 'miss' | null }
+  stats: { collisions: number; airborne: number; falls: number; biggestFall: number; vents: number; abilities: number; throws: number; backward: number }
 }
-export interface Player extends Racer { name: string; ready: boolean; place: number }
+export interface Player extends Racer { name: string; ready: boolean; place: number; bot?: boolean }
 export interface Snapshot {
-  code: string; hostId: string; practice: boolean; phase: Phase
+  code: string; hostId: string; practice: boolean; cup?: boolean; phase: Phase
   elapsed: number; countdown: number; timeLimit: number
   event: { kind: RaceEvent; stage: 'warning' | 'active'; remaining: number; centerZ?: number } | null
   players: Player[]

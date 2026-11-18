@@ -1,4 +1,7 @@
 const marks = {
+  bolt: '<path d="m13 2-9 12h7l-1 8 10-13h-8z"/>',
+  camera: '<path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/>',
+  gate: '<path d="M3 21V9l5-6h8l5 6v12M6 21V10l3.5-4h5l3.5 4v11"/>',
   arrow: '<path d="M4 12h15m-6-6 6 6-6 6"/>',
   flag: '<path d="m5 21 2-16c4-4 8 4 14-1l-2 10c-5 4-9-3-13 0"/>',
   users:

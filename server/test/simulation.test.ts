@@ -249,3 +249,53 @@ test('a racer underneath Suspicious Bridge can follow the middle of the recovery
   assert.ok(belowDeck, 'the racer used the lower route')
   assert.ok(sim.players()[0].checkpoint >= 3, JSON.stringify(sim.players()[0]))
 })
+
+test('erupting steam vents launch grounded racers, stay dormant while cool and cannot be farmed', async () => {
+  const { STEAM_VENTS, ventState } = await import('../../shared/src/vents.js')
+  const vent = STEAM_VENTS[0]
+  const s = race()
+  let frames = 0
+  function steer(x: number, z: number, stopAtTarget = false) {
+    const p = s.players()[0]
+    const dz = stopAtTarget ? Math.min(1, Math.max(-1, (z - p.z) / 2.8)) : 1
+    control(s, { x: Math.max(-1, Math.min(1, (p.x - x) / 2.8)), z: dz, sprint: !stopAtTarget })
+    tick(s)
+    frames++
+  }
+  while (frames < 2500 && s.players()[0].z < vent.z - 12) {
+    const p = s.players()[0]
+    steer(centerAt(p.z + 5) + 8.7, p.z + 6)
+  }
+  const outsideZ = vent.z - 7
+  for (let i = 0; i < 95; i++) steer(vent.x, outsideZ, true)
+  assert.ok(Math.abs(s.players()[0].z - outsideZ) < .2)
+  while (!(ventState(vent, frames / 30).stage === 'cool' && ventState(vent, frames / 30).progress < .1)) {
+    steer(vent.x, outsideZ, true)
+  }
+  for (let i = 0; i < 85; i++) steer(vent.x, vent.z, true)
+  assert.equal(ventState(vent, frames / 30).stage, 'cool')
+  assert.equal(s.players()[0].stats.vents, 0)
+  assert.ok(Math.abs(s.players()[0].z - vent.z) < .4)
+  const stages = new Set<string>()
+  for (let i = 0; i < 140 && s.players()[0].stats.vents === 0; i++) {
+    steer(vent.x, vent.z, true)
+    stages.add(ventState(vent, frames / 30).stage)
+  }
+  const launched = s.players()[0]
+  assert.ok(stages.has('warning'))
+  assert.equal(ventState(vent, frames / 30).stage, 'erupting')
+  assert.equal(launched.stats.vents, 1)
+  assert.equal(launched.grounded, false)
+  assert.ok(launched.vy > 10 && launched.vz > 19 && launched.vz < 30)
+  let peak = launched.y
+  for (let i = 0; i < 70; i++) {
+    steer(vent.x, vent.z, true)
+    peak = Math.max(peak, s.players()[0].y)
+  }
+  assert.ok(peak > vent.y + 3.5)
+  for (let i = 0; i < 460; i++) steer(vent.x, vent.z, true)
+  assert.ok(Math.abs(s.players()[0].z - vent.z) < .5)
+  assert.equal(s.players()[0].stats.vents, 1)
+  s.reset()
+  assert.equal(s.players()[0].stats.vents, 0)
+})
